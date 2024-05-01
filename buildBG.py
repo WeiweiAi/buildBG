@@ -637,7 +637,7 @@ def to_cellmlV1_models(comp_dict, model_name='BG',model_file='BG.txt',params_fil
 
             
 if __name__ == "__main__": 
-    
+
     file_path='./data/'
     fmatrix='SLC2_f.csv'
     rmatrix='SLC2_r.csv'
@@ -668,6 +668,9 @@ if __name__ == "__main__":
 
     csv_file=file_path+'SLC2_BG.csv'
     update_params(comp_dict,n_zeros, kappa, K, q_init_all, csv_file)
+    # read the json file
+    with open(csv_file.replace('.csv','.json')) as f:
+        comp_dict = json.load(f)
     to_cellmlV1_params(comp_dict, model_name='params_BG',model_file='params_BG.txt',file_path=file_path)
     to_cellmlV1_models(comp_dict, model_name='GLUT2_BG',model_file='GLUT2_BG.txt',params_file='params_BG.cellml',file_path=file_path)
 
