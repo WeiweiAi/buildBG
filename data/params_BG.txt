@@ -1,0 +1,28 @@
+def model params_BG as
+    def import using "./units.cellml" for
+        unit fmol_per_s using unit fmol_per_s;
+        unit fmol using unit fmol;
+        unit J_per_K_mol using unit J_per_K_mol;
+        unit per_fmol using unit per_fmol;
+    enddef;
+    def comp params_BG as
+        var R: J_per_K_mol{ init: 8.31, pub: out};
+        var T: kelvin{ init: 293, pub: out};
+        var K_Ai: per_fmol{ init: 1.496e+02, pub: out};
+        var q_init_Ai: fmol{ init: 16.605778811026234, pub: out};
+        var K_Ao: per_fmol{ init: 1.496e+02, pub: out};
+        var q_init_Ao: fmol{ init: 16.605778811026234, pub: out};
+        var K_1: per_fmol{ init: 33.196, pub: out};
+        var q_init_1: fmol{ init: 16.605778811026234, pub: out};
+        var K_2: per_fmol{ init: 4.247e+03, pub: out};
+        var q_init_2: fmol{ init: 16.605778811026234, pub: out};
+        var K_3: per_fmol{ init: 3.446e+02, pub: out};
+        var q_init_3: fmol{ init: 16.605778811026234, pub: out};
+        var K_4: per_fmol{ init: 1.992, pub: out};
+        var q_init_4: fmol{ init: 16.605778811026234, pub: out};
+        var kappa_r1: fmol_per_s{ init: 0.365, pub: out};
+        var kappa_r2: fmol_per_s{ init: 0.262, pub: out};
+        var kappa_r3: fmol_per_s{ init: 1.007e+05, pub: out};
+        var kappa_r4: fmol_per_s{ init: 1.007e+04, pub: out};
+    enddef;
+enddef;
