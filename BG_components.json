@@ -1,18 +1,18 @@
-# Adapted from https://github.com/BondGraphTools/BondGraphTools 
-# under the Apache License http://www.apache.org/licenses/LICENSE-2.0
-# Add units to the parameters, variables;
-# Define individual components
-import json
-R = {
+{
+    "R": {
         "description": "Generalised Linear Resistor",
         "domain": "Electrical",
         "id": "R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'},
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
@@ -25,33 +25,36 @@ R = {
                 ]
             }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V",                
+                "symbol": "V"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I",
+                "symbol": "I"
             }
         },
         "constitutive_relations": [
             "e_0 - f_0*r"
         ]
-    }
-
-C = {
+    },
+    "C": {
         "description": "Generalised Linear Capacitor",
         "domain": "Electrical",
         "id": "C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
@@ -66,24 +69,24 @@ C = {
             "q_init": {
                 "description": "Generalised position",
                 "units": "fC",
-                "symbol": "q_init",     
-                "value": 1,
-            },
+                "symbol": "q_init",
+                "value": 1
+            }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V",
+                "symbol": "V"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I",
+                "symbol": "I"
             }
         },
         "voi": {
-            "t":{
+            "t": {
                 "description": "Time",
                 "units": "second",
                 "symbol": "t"
@@ -102,31 +105,35 @@ C = {
             "q_0 - C * e_0",
             "ode(q_0,t) - f_0"
         ]
-    }
-I = {
+    },
+    "I": {
         "description": "Generalised Linear Inductor",
         "domain": "Electrical",
         "id": "I",
         "metamodel": "I",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
-        "vars":{
+        "signals": {},
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V",
+                "symbol": "V"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I",
+                "symbol": "I"
             }
         },
         "voi": {
-            "t":{
+            "t": {
                 "description": "Time",
                 "units": "second",
                 "symbol": "t"
@@ -138,7 +145,7 @@ I = {
                 "units": "volt_s",
                 "symbol": "p",
                 "voi": "t"
-            },
+            }
         },
         "params": {
             "L": {
@@ -156,17 +163,21 @@ I = {
             "p_0 - L*f_0",
             "ode(p_0,t) - e_0"
         ]
-    }
-Se = {
+    },
+    "Se": {
         "description": "Effort Source",
         "domain": "Electrical",
         "id": "Se",
         "metamodel": "SS",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "e": {
                 "description": "Generalised Potential",
@@ -175,27 +186,31 @@ Se = {
                 "value": 0
             }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V",
+                "symbol": "V"
             }
         },
         "constitutive_relations": [
             "e_0 - e"
         ]
-    }
-Sf = {
+    },
+    "Sf": {
         "description": "Flow Source",
         "domain": "Electrical",
         "id": "Sf",
         "metamodel": "SS",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "f": {
                 "description": "Generalised Flow",
@@ -204,18 +219,18 @@ Sf = {
                 "value": 0
             }
         },
-        "vars":{
+        "vars": {
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I",
+                "symbol": "I"
             }
         },
         "constitutive_relations": [
             "f_0 - f"
         ]
-    }
-TF = {
+    },
+    "TF": {
         "description": "Linear Transformer",
         "domain": "Electrical",
         "id": "TF",
@@ -223,51 +238,56 @@ TF = {
         "ports": {
             "0": {
                 "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
             },
             "1": {
                 "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
             }
         },
-        "signals": {
-        },
-        "vars":{
+        "signals": {},
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V_0",
+                "symbol": "V_0"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I_0",
+                "symbol": "I_0"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V_1",
+                "symbol": "V_1"
             },
             "f_1": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I_1",
-            },
-        },   
+                "symbol": "I_1"
+            }
+        },
         "params": {
             "r": {
                 "description": "Ratio",
                 "value": 1,
                 "units": "dimensionless",
-                "symbol": "n",
+                "symbol": "n"
             }
         },
         "constitutive_relations": [
             "e_1 - r * e_0",
             "f_0 - r * f_1"
         ]
-    }
-GY = {
+    },
+    "GY": {
         "description": "Linear Gyrator",
         "domain": "Electrical-Mechanical",
         "id": "GY",
@@ -275,28 +295,33 @@ GY = {
         "ports": {
             "0": {
                 "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
             },
             "1": {
                 "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
             }
         },
-        "signals": {
-        },
-        "vars":{
+        "signals": {},
+        "vars": {
             "e_0": {
-                "description": "Generalised Potential",
+                "description": "Generalised Potential"
             },
             "f_0": {
-                "description": "Generalised Flow",
+                "description": "Generalised Flow"
             },
             "e_1": {
-                "description": "Generalised Potential",
+                "description": "Generalised Potential"
             },
             "f_1": {
-                "description": "Generalised Flow",
-            },
+                "description": "Generalised Flow"
+            }
         },
         "params": {
             "r": {
@@ -308,139 +333,147 @@ GY = {
             "e_1 - r*f_0",
             "e_0 - r*f_1"
         ]
-    }
-
-Ce = {
-        "description":"Concentration of Chemical Species",
+    },
+    "Ce": {
+        "description": "Concentration of Chemical Species",
         "domain": "biochemical",
-        "id":"Ce",
-        "metamodel":"C",
-        "ports":{
-          "0":{
-              'in':[],'out':[],
-              'type': ' ','direction': 'in'
-          },
+        "id": "Ce",
+        "metamodel": "C",
+        "ports": {
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
-        "params":{
-          "K":{
-              "description": "Biochemical Constant; exp(mu_0/RT)/V",
-              "units": "per_fmol",
-              "symbol": "K",
-              "value": 1
-          },
-          "R":{
-              "description":"Universal Gas Constant",
-              "units": "J_per_K_mol",
-              "symbol": "R",
-              "value": 8.31,
-          },
-          "T":{
-              "description": "Temperature",
-              "units": "kelvin",
-              "symbol": "T",
-              "value": 293,
-          },
-          "q_init":{
-              "description": "Initial Molar Quantity",
-              "units": "fmol",
-              "symbol": "q_init",
-              "value": 1,
-          }
+        "signals": {},
+        "params": {
+            "K": {
+                "description": "Biochemical Constant; exp(mu_0/RT)/V",
+                "units": "per_fmol",
+                "symbol": "K",
+                "value": 1
+            },
+            "R": {
+                "description": "Universal Gas Constant",
+                "units": "J_per_K_mol",
+                "symbol": "R",
+                "value": 8.31
+            },
+            "T": {
+                "description": "Temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293
+            },
+            "q_init": {
+                "description": "Initial Molar Quantity",
+                "units": "fmol",
+                "symbol": "q_init",
+                "value": 1
+            }
         },
         "voi": {
-          "t":{
-              "description": "Time",
-              "units": "second",
-              "symbol": "t"
-          }
-        },       
-        "state_vars":{ 
-          "q_0":{
-              "description":"Molar Quantity",
-              "units": "fmol",
-              "symbol": "q",
-              "value": "q_init",
-              'voi': 't'
-          },
+            "t": {
+                "description": "Time",
+                "units": "second",
+                "symbol": "t"
+            }
         },
-        "vars":{
-          "e_0": {
-              "description": "Generalised Potential",
-              "units": "J_per_mol",
-              "symbol": "mu",
-          },
-          "f_0": {
-              "description": "Generalised Flow ",
-              "units": "fmol_per_s",
-              "symbol": "v",
-          },
+        "state_vars": {
+            "q_0": {
+                "description": "Molar Quantity",
+                "units": "fmol",
+                "symbol": "q",
+                "value": "q_init",
+                "voi": "t"
+            }
         },
-        "constitutive_relations":[
-          "e_0 - R*T*log(K*q_0)",
-          "ode(q_0,t) - f_0"
+        "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "mu"
+            },
+            "f_0": {
+                "description": "Generalised Flow ",
+                "units": "fmol_per_s",
+                "symbol": "v"
+            }
+        },
+        "constitutive_relations": [
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ]
-     }
-Re ={
+    },
+    "Re": {
         "description": "Biochemical Reaction",
         "domain": "biochemical",
         "id": "Re",
-        "metamodel":"R",
-        "ports":{
-          "0":{'in':[],'out':[],'type': ' ','direction': 'in'},
-          "1":{'in':[],'out':[],'type': ' ','direction': 'out'}
+        "metamodel": "R",
+        "ports": {
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            },
+            "1": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
+            }
         },
-        "signals": {
+        "signals": {},
+        "params": {
+            "kappa": {
+                "description": "Reaction Rate",
+                "units": "fmol_per_s",
+                "value": 1,
+                "symbol": "kappa"
+            },
+            "R": {
+                "description": "Universal Gas Constant",
+                "value": 8.31,
+                "units": "J_per_K_mol",
+                "symbol": "R"
+            },
+            "T": {
+                "description": "Temperature",
+                "value": 293,
+                "units": "kelvin",
+                "symbol": "T"
+            }
         },
-        "params":{
-          "kappa":{
-              "description":"Reaction Rate",
-              "units": "fmol_per_s",
-              "value": 1,
-              "symbol": "kappa"
-          },
-          "R":{
-              "description":"Universal Gas Constant",
-              "value": 8.31,
-              "units": "J_per_K_mol",
-              "symbol": "R"
-          },
-          "T":{
-              "description": "Temperature",
-              "value": 293,
-              "units": "kelvin",
-              "symbol": "T"
-          }
+        "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "Af"
+            },
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v"
+            },
+            "e_1": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "Ar"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v"
+            }
         },
-        "vars":{
-              "e_0": {
-                  "description": "Generalised Potential",
-                  "units": "J_per_mol",
-                  "symbol": "Af",
-              },
-              "f_0": {
-                  "description": "Generalised Flow",
-                  "units": "fmol_per_s",
-                  "symbol": "v",
-              },
-              "e_1": {
-                  "description": "Generalised Potential",
-                  "units": "J_per_mol",
-                  "symbol": "Ar",
-              },
-              "f_1": {
-                  "description": "Generalised Flow",
-                  "units": "fmol_per_s",
-                  "symbol": "v",
-              }
-          },
-        "constitutive_relations":[
-          "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
+        "constitutive_relations": [
+            "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ]
-    }
-
-zF = {
+    },
+    "zF": {
         "description": "Biochemical Transformer",
         "domain": "biochemical",
         "id": "zF",
@@ -448,176 +481,192 @@ zF = {
         "ports": {
             "0": {
                 "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
             },
             "1": {
                 "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
             }
         },
-        "signals": {
-        },
-        "vars":{
+        "signals": {},
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "volt",
-                "symbol": "V",
+                "symbol": "V"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
-                "symbol": "I",
+                "symbol": "I"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu",
+                "symbol": "mu"
             },
             "f_1": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v",
-            },
+                "symbol": "v"
+            }
         },
         "params": {
             "r": {
                 "description": "Ratio",
                 "value": 1,
                 "units": "dimensionless",
-                "symbol": "z",
+                "symbol": "z"
             },
             "F": {
                 "description": "Faraday's Constant",
                 "value": 96485,
                 "units": "C_per_mol",
-                "symbol": "F",
+                "symbol": "F"
             }
         },
         "constitutive_relations": [
             "e_1 - r * F* e_0",
             "f_0 - r * F * f_1"
         ]
-    }
-
-ch_Se = {
-          "description":"Concentration of Chemical Species",
-          "domain": "biochemical",
-          "id":"ch_Se",
-          "metamodel":"SS",
-          "ports":{
-            "0":{
-                'in':[],'out':[],
-                'type': ' ','direction': 'in'
-            },
-          },
-          "signals": {
+    },
+    "ch_Se": {
+        "description": "Concentration of Chemical Species",
+        "domain": "biochemical",
+        "id": "ch_Se",
+        "metamodel": "SS",
+        "ports": {
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-          "params":{
-            "K":{
+        "signals": {},
+        "params": {
+            "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
                 "units": "per_fmol",
                 "symbol": "K",
                 "value": 1
             },
-            "R":{
-                "description":"Universal Gas Constant",
+            "R": {
+                "description": "Universal Gas Constant",
                 "units": "J_per_K_mol",
                 "symbol": "R",
-                "value": 8.31,
+                "value": 8.31
             },
-            "T":{
+            "T": {
                 "description": "Temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 293
             },
-            "q_0":{
-                "description":"Molar Quantity",
+            "q_0": {
+                "description": "Molar Quantity",
                 "units": "fmol",
                 "symbol": "q",
-                "value": 1,
-            },
-          },
-          "vars":{
+                "value": 1
+            }
+        },
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu",
-            },
-          },
-          "constitutive_relations":[
-            "e_0 - R*T*log(K*q_0)",
-          ]
-        }
-
-m_Se = {
-            "description": "Effort Source",
-            "domain": "Mechanical",
-            "id": "m_Se",
-            "metamodel": "SS",
-            "ports": {
-                "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-            },
-            "signals": {
-            },
-            "params": {
-                "e": {
-                    "description": "Generalised Potential",
-                    "units": "J_per_um",
-                    "symbol": "F0",
-                    "value": 0
-                }
-            },
-            "vars":{
-                "e_0": {
-                    "description": "Generalised Potential",
-                    "units": "J_per_um",
-                    "symbol": "F",
-                }
-            },
-            "constitutive_relations": [
-                "e_0 - e"
-            ]
-        }
-m_Sf = {
-            "description": "Flow Source",
-            "domain": "Mechanical",
-            "id": "m_Sf",
-            "metamodel": "SS",
-            "ports": {
-                "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
-            },
-            "signals": {
-            },
-            "params": {
-                "f": {
-                    "description": "Generalised Flow",
-                    "units": "um_per_s",
-                    "symbol": "dx0",
-                    "value": 0
-                }
-            },
-            "vars":{
-                "f_0": {
-                    "description": "Generalised Flow",
-                    "units": "um_per_s",
-                    "symbol": "dx",
-                }
-            },
-            "constitutive_relations": [
-                "f_0 + f"
-            ]
-        }
-m_R = {
+                "symbol": "mu"
+            }
+        },
+        "constitutive_relations": [
+            "e_0 - R*T*log(K*q_0)"
+        ]
+    },
+    "m_Se": {
+        "description": "Effort Source",
+        "domain": "Mechanical",
+        "id": "m_Se",
+        "metamodel": "SS",
+        "ports": {
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
+        },
+        "signals": {},
+        "params": {
+            "e": {
+                "description": "Generalised Potential",
+                "units": "J_per_um",
+                "symbol": "F0",
+                "value": 0
+            }
+        },
+        "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "J_per_um",
+                "symbol": "F"
+            }
+        },
+        "constitutive_relations": [
+            "e_0 - e"
+        ]
+    },
+    "m_Sf": {
+        "description": "Flow Source",
+        "domain": "Mechanical",
+        "id": "m_Sf",
+        "metamodel": "SS",
+        "ports": {
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "out"
+            }
+        },
+        "signals": {},
+        "params": {
+            "f": {
+                "description": "Generalised Flow",
+                "units": "um_per_s",
+                "symbol": "dx0",
+                "value": 0
+            }
+        },
+        "vars": {
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "um_per_s",
+                "symbol": "dx"
+            }
+        },
+        "constitutive_relations": [
+            "f_0 + f"
+        ]
+    },
+    "m_R": {
         "description": "Generalised Linear Resistor",
         "domain": "Mechanical",
         "id": "m_R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
@@ -630,33 +679,36 @@ m_R = {
                 ]
             }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_um",
-                "symbol": "F",
+                "symbol": "F"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "um_per_s",
-                "symbol": "dx",
+                "symbol": "dx"
             }
         },
         "constitutive_relations": [
             "e_0 - f_0*r"
         ]
-    }
-
-m_C = {
+    },
+    "m_C": {
         "description": "Generalised Linear Capacitor",
         "domain": "Mechanical",
         "id": "m_C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
@@ -672,23 +724,23 @@ m_C = {
                 "description": "Generalised position",
                 "units": "um",
                 "symbol": "x_init",
-                "value": 1,
-            },
+                "value": 1
+            }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_um",
-                "symbol": "F",
+                "symbol": "F"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "um_per_s",
-                "symbol": "dx",
+                "symbol": "dx"
             }
         },
         "voi": {
-            "t":{
+            "t": {
                 "description": "Time",
                 "units": "second",
                 "symbol": "t"
@@ -707,18 +759,21 @@ m_C = {
             "q_0 - C * e_0",
             "dq_0 - f_0"
         ]
-    }
-
-cv_R = {
+    },
+    "cv_R": {
         "description": "Generalised Linear Resistor",
         "domain": "Cardiovascular",
         "id": "cv_R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
@@ -731,33 +786,36 @@ cv_R = {
                 ]
             }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "mmHg",
-                "symbol": "mu",
+                "symbol": "mu"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "mL_per_s",
-                "symbol": "v",
+                "symbol": "v"
             }
         },
         "constitutive_relations": [
             "e_0 - f_0*r"
         ]
-    }
-
-cv_C = {
+    },
+    "cv_C": {
         "description": "Generalised Linear Capacitor",
         "domain": "Cardiovascular",
         "id": "cv_C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
+        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
@@ -773,23 +831,23 @@ cv_C = {
                 "description": "Generalised position",
                 "units": "mL",
                 "symbol": "q_init",
-                "value": 1,
-            },
+                "value": 1
+            }
         },
-        "vars":{
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "mmHg",
-                "symbol": "mu",
+                "symbol": "mu"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "mL_per_s",
-                "symbol": "v",
+                "symbol": "v"
             }
         },
         "voi": {
-            "t":{
+            "t": {
                 "description": "Time",
                 "units": "second",
                 "symbol": "t"
@@ -800,39 +858,42 @@ cv_C = {
                 "description": "Generalised position",
                 "units": "mL",
                 "symbol": "q",
-                "value": "q_init",
+                "value": "q_init"
             }
         },
         "constitutive_relations": [
             "q_0 - C * e_0",
             "dq_0 - f_0"
         ]
-    }
-
-cv_I = {
+    },
+    "cv_I": {
         "description": "Generalised Linear Inductor",
         "domain": "Cardiovascular",
         "id": "cv_I",
         "metamodel": "I",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
+            "0": {
+                "in": [],
+                "out": [],
+                "type": " ",
+                "direction": "in"
+            }
         },
-        "signals": {
-        },
-        "vars":{
+        "signals": {},
+        "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "mmHg",
-                "symbol": "mu",
+                "symbol": "mu"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "mL_per_s",
-                "symbol": "v",
+                "symbol": "v"
             }
         },
         "voi": {
-            "t":{
+            "t": {
                 "description": "Time",
                 "units": "second",
                 "symbol": "t"
@@ -844,7 +905,7 @@ cv_I = {
                 "units": "mmHg_mL2_per_s3",
                 "symbol": "p",
                 "voi": "t"
-            },
+            }
         },
         "params": {
             "L": {
@@ -856,40 +917,11 @@ cv_I = {
                     0,
                     "inf"
                 ]
-            }   
+            }
         },
         "constitutive_relations": [
             "p_0 - L*f_0",
             "dp_0 - e_0"
         ]
     }
-
-def BG_components():
-    components = {
-        "R": R,
-        "C": C,
-        "I": I,
-        "Se": Se,
-        "Sf": Sf,
-        "TF": TF,
-        "GY": GY,
-        "Ce": Ce,
-        "Re": Re,
-        "zF": zF,
-        "ch_Se": ch_Se,
-        "m_Se": m_Se,
-        "m_Sf": m_Sf,
-        "m_R": m_R,
-        "m_C": m_C,
-        "cv_R": cv_R,
-        "cv_C": cv_C,
-        "cv_I": cv_I,
-    }
-    return components 
-
-if __name__ == "__main__": 
-
-    json_file = 'BG_components.json'
-    comp_dict = BG_components()
-    with open(json_file, 'w') as f:
-        json.dump(comp_dict, f,indent=4)
+}
