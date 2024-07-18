@@ -1,4 +1,3 @@
-import pandas as pd
 import copy
 import numpy as np
 import csv
@@ -265,6 +264,182 @@ def update_BG_eqn(comp_dict):
                             solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                         comp['constitutive_relations_sym']+= [[ccode(solved_expr), comp['vars'][key_var]['symbol'], '']]
 
+
+def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
+    """
+    Convert kinetic parameters to BG parameters for biochemical reactions
+    The method is based on the thesis:
+    Pan, Michael. A bond graph approach to integrative biophysical modelling.
+    Diss. University of Melbourne, Parkville, Victoria, Australia, 2019.
+
+    Parameters
+    ----------
+    N_f : numpy.ndarray
+        The forward stoichiometry matrix
+    N_r : numpy.ndarray
+        The reverse stoichiometry matrix
+    kf : numpy.ndarray
+        The forward rate constants,
+        a column vector with the same number of rows as the number of reactions
+        and the same order as the reactions in N_f  
+    kr : numpy.ndarray
+        The reverse rate constants,
+        a column vector with the same number of rows as the number of reactions
+        and the same order as the reactions in N_r
+    K_c : numpy.ndarray
+        The constraints vector,
+        a column vector
+    N_c : numpy.ndarray
+        The constraints matrix,
+        the columns of N_c is the same as the number of the K_c
+        the rows of N_c is the same as the number of the species
+    Ws : numpy.ndarray
+        The volume vector, the size is the number of species ns       
+
+    Returns
+    -------
+    kappa : numpy.ndarray
+        The reaction rate constants
+    K : numpy.ndarray
+        The thermodynamic constants
+    K_eq : numpy.ndarray
+        The equilibrium constants
+    diff_ : float
+        The difference between the estimated and the input kinetic parameters
+    zero_est : numpy.ndarray
+        The estimated zero values of the detailed balance constraints
+
+    """ 
+    N_fT=np.transpose(N_f)
+    N_rT=np.transpose(N_r)
+    N = N_r - N_f
+    num_cols = N_f.shape[1] # number of reactions, the same as the number of columns in N_f
+    num_rows = N_f.shape[0] # number of species, the same as the number of rows in N_f
+    I=np.identity(num_cols)
+    N_cT=np.transpose(N_c)
+    num_contraints = K_c.shape[0]
+    zerofill=np.zeros((num_contraints,num_cols))
+    K_eq = np.divide(kf,kr)
+    if len(K_c)!=0:
+        M=np.block([
+            [I, N_fT],
+            [I, N_rT],
+            [zerofill, N_cT]
+        ])
+        k= np.block([
+            [kf],
+            [kr],
+            [K_c]
+        ]) 
+        N_b =np.hstack([-N, N_c])
+        K_contraints = np.block([
+            [K_eq],
+            [K_c]
+        ])
+    else:
+        M=np.block([
+            [I, N_fT],
+            [I, N_rT]
+        ])
+        k= np.block([
+            [kf],
+            [kr]
+        ])
+        N_b = -N
+        K_contraints = K_eq
+    # construct W matrix 
+    # the first nr elements are 1 for reactions, the last ns elements are the volume of species
+    W=np.vstack([np.ones((num_cols,1)),Ws]) 
+
+    # convert kinetic parameters to BG parameters
+    lambdaW= np.exp(np.matmul(np.linalg.pinv(M),np.log(k)))
+    lambda_ = np.divide(lambdaW,W)
+    kappa=lambda_[:num_cols]
+    K = lambda_[num_cols:]
+    
+    # check if the solution is valid
+    N_rref, _ = Matrix(N).rref()
+    zero_est = None
+    R_mat = np.array(nsimplify(Matrix(N), rational=True).nullspace())
+    if R_mat.size>0:
+        R_mat = np.transpose(np.array(R_mat).astype(np.float64))[0]
+        zero_est = np.matmul(R_mat.T,K_eq)
+    # Check that there is a detailed balance constraint
+    Z = nsimplify(Matrix(N_b), rational=True).nullspace() #rational_nullspace(M, 2)
+    if Z:
+        Z = np.transpose(np.array(Z).astype(np.float64))[0]
+        zero_est = np.matmul(Z.T,np.log(K_contraints))
+
+    k_est = np.exp(np.matmul(M,np.log(lambdaW)))
+    diff_ = np.sum(np.abs(np.divide(k_est - k,k)))
+
+    return kappa, K, K_eq, diff_, zero_est
+
+def update_BG_params(comp_dict, kappa, RName, K, CName, csv_file='params_BG.csv'):
+    """
+    Update the BG parameters in the comp_dict with the parameters
+
+    Parameters
+    ----------
+    comp_dict : dict
+        The dictionary of the bond graph model
+    kappa : numpy.ndarra
+        The reaction rate constants
+    RName : list
+        A list of reaction component Re names
+        The order of the names should be the same as the order of the kappa
+    K : numpy.ndarray
+        The thermodynamic constants
+    CName : list
+        A list of species component Ce names
+        The order of the names should be the same as the order of the kappa
+    csv : str, optional
+        The file path of the csv file to save the parameters
+        The default is 'params_BG.csv'.
+
+    Returns
+    -------
+    None
+
+    side effect
+    ------------
+    Update the parameters of the components
+    Save the parameters to a csv file
+
+    """
+    def toLatexStr (var_name):
+        sub_str_1=var_name.split('_')[0]
+        if len(var_name.split('_'))>1:
+            sub_str_2=var_name.split('_')[1]
+            latex_str='$\\'+sub_str_1+'_{'+sub_str_2+'}$'
+        else:
+            sub_str_2=''
+            latex_str='$\\'+sub_str_1+'$'
+
+        return latex_str
+    
+    with open(csv_file, mode='w') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Parameter', 'Value'])
+        for i in range(len(RName)):
+            if abs(kappa[i][0])<1e-2 or abs(kappa[i][0])>1e2:
+                kappa_="{:.3e}".format(kappa[i][0])
+            else:
+                kappa_="{:.3f}".format(kappa[i][0])
+            comp_dict[RName[i]]['params']['kappa']['value']=kappa_
+            var_name=comp_dict[RName[i]]['params']['kappa']['symbol']
+            latex_str=toLatexStr(var_name)
+            writer.writerow([latex_str, kappa_])
+        for i in range(len(CName)):
+            if abs(K[i][0])<1e-2 or abs(K[i][0])>1e2:
+                K_="{:.3e}".format(K[i][0])
+            else:
+                K_="{:.3f}".format(K[i][0])
+            comp_dict[CName[i]]['params']['K']['value']=K_
+            var_name=comp_dict[CName[i]]['params']['K']['symbol']
+            latex_str=toLatexStr(var_name)
+            writer.writerow([latex_str, K_])
+
 if __name__ == "__main__": 
 
     file_path='./data/'
@@ -282,6 +457,27 @@ if __name__ == "__main__":
     
     update_BG_eqn(comp_dict)
     # dump the comp_dict to a json file, which has the same name and path as the csv file (using Path)
+    
+    CName, CType, CPort, RName, RType, RPort,N_f=load_matrix(file_path+fmatrix)
+    CName, CType, CPort, RName, RType, RPort,N_r=load_matrix(file_path+rmatrix)
+
+    V=1
+    V_o=90
+    h=0.726;g=12.1;c=1113;d=90.3;a=500000*V_o;b=a*9.5;f=3000*V_o;e=12.8459*f
+    kf=np.array([[h, c, a, e]]).transpose()
+    kr=np.array([[g, d, b, f]]).transpose()
+    K_c=np.array([[1]]).transpose()
+    N_c=np.array([[1,-1,0,0,0,0]]).transpose()
+    K_c=np.array([[]]).transpose()
+    N_c=np.array([[]]).transpose()
+    V_i=0.09
+    V_o=0.09
+    V_E=1
+    Ws=np.array([[V_i,V_o,V_E,V_E,V_E,V_E]]).transpose()
+
+    kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
+    update_BG_params(comp_dict, kappa, RName, K, CName, csv_file='params_BG.csv')
+
     json_file=Path(fmatrix).with_suffix('.json')    
     with open(json_file, 'w') as f:
         json.dump(comp_dict, f,indent=4)   
