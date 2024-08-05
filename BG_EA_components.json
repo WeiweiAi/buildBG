@@ -1,0 +1,510 @@
+{
+    "R": {
+        "componentID": "R",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "C": {
+        "componentID": "C",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "I": {
+        "componentID": "I",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "Se": {
+        "componentID": "Se",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "Sf": {
+        "componentID": "Sf",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "TF": {
+        "componentID": "TF",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_0"
+            },
+            "P_1": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_1"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "Ce": {
+        "componentID": "Ce",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "Re": {
+        "componentID": "Re",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_0"
+            },
+            "P_1": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_1"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "zF": {
+        "componentID": "zF",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_0"
+            },
+            "P_1": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_1"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "ch_Se": {
+        "componentID": "ch_Se",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "fJ_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "fJ",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "fJ",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "m_Se": {
+        "componentID": "m_Se",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "J",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "J",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "m_Sf": {
+        "componentID": "m_Sf",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "J",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "J",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "m_R": {
+        "componentID": "m_R",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "J",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "J",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "m_C": {
+        "componentID": "m_C",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "J_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "J",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "J",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "cv_R": {
+        "componentID": "cv_R",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "mmHg_mL",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "mmHg_mL",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "cv_C": {
+        "componentID": "cv_C",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "mmHg_mL",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "mmHg_mL",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    },
+    "cv_I": {
+        "componentID": "cv_I",
+        "vars": {
+            "P_0": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P"
+            },
+            "P_sum": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P_sum"
+            }
+        },
+        "state_vars": {
+            "A": {
+                "description": "Generalised activity",
+                "units": "mmHg_mL",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "mmHg_mL",
+                "symbol": "E",
+                "value": 0
+            }
+        }
+    }
+}

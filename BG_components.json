@@ -67,7 +67,7 @@
                 ]
             },
             "q_init": {
-                "description": "Generalised position",
+                "description": "Initial Generalised Position",
                 "units": "fC",
                 "symbol": "q_init",
                 "value": 1
@@ -85,20 +85,12 @@
                 "symbol": "I"
             }
         },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-            }
-        },
         "state_vars": {
             "q_0": {
                 "description": "Generalised position",
                 "units": "fC",
                 "symbol": "q",
-                "value": "q_init",
-                "voi": "t"
+                "value": "q_init"
             }
         },
         "constitutive_relations": [
@@ -132,19 +124,12 @@
                 "symbol": "I"
             }
         },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-            }
-        },
         "state_vars": {
             "p_0": {
                 "description": "Generalised momentum",
                 "units": "volt_s",
                 "symbol": "p",
-                "voi": "t"
+                "value": "p_init"
             }
         },
         "params": {
@@ -157,6 +142,12 @@
                     0,
                     "inf"
                 ]
+            },
+            "p_init": {
+                "description": "Initial generalised momentum",
+                "units": "volt_s",
+                "symbol": "p_init",
+                "value": 1
             }
         },
         "constitutive_relations": [
@@ -174,7 +165,7 @@
                 "in": [],
                 "out": [],
                 "type": " ",
-                "direction": "in"
+                "direction": "out"
             }
         },
         "signals": {},
@@ -191,6 +182,11 @@
                 "description": "Generalised Potential",
                 "units": "volt",
                 "symbol": "V"
+            },
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "fA",
+                "symbol": "I"
             }
         },
         "constitutive_relations": [
@@ -220,6 +216,11 @@
             }
         },
         "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "volt",
+                "symbol": "V"
+            },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fA",
@@ -374,20 +375,12 @@
                 "value": 1
             }
         },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-            }
-        },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
                 "units": "fmol",
                 "symbol": "q",
-                "value": "q_init",
-                "voi": "t"
+                "value": "q_init"
             }
         },
         "vars": {
@@ -466,7 +459,8 @@
             "f_1": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v"
+                "symbol": "v",
+                "expression": "v"
             }
         },
         "constitutive_relations": [
@@ -546,7 +540,7 @@
                 "in": [],
                 "out": [],
                 "type": " ",
-                "direction": "in"
+                "direction": "out"
             }
         },
         "signals": {},
@@ -581,6 +575,11 @@
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
                 "symbol": "mu"
+            },
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v"
             }
         },
         "constitutive_relations": [
@@ -597,7 +596,7 @@
                 "in": [],
                 "out": [],
                 "type": " ",
-                "direction": "in"
+                "direction": "out"
             }
         },
         "signals": {},
@@ -614,6 +613,11 @@
                 "description": "Generalised Potential",
                 "units": "J_per_um",
                 "symbol": "F"
+            },
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "um_per_s",
+                "symbol": "dx"
             }
         },
         "constitutive_relations": [
@@ -643,6 +647,11 @@
             }
         },
         "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "J_per_um",
+                "symbol": "F"
+            },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "um_per_s",
@@ -650,7 +659,7 @@
             }
         },
         "constitutive_relations": [
-            "f_0 + f"
+            "f_0 - f"
         ]
     },
     "m_R": {
@@ -721,7 +730,7 @@
                 ]
             },
             "q_init": {
-                "description": "Generalised position",
+                "description": "Initial generalised position",
                 "units": "um",
                 "symbol": "x_init",
                 "value": 1
@@ -739,25 +748,17 @@
                 "symbol": "dx"
             }
         },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-            }
-        },
         "state_vars": {
             "q_0": {
                 "description": "Generalised position",
                 "units": "um",
                 "symbol": "x",
-                "value": "q_init",
-                "voi": "t"
+                "value": "x_init"
             }
         },
         "constitutive_relations": [
             "q_0 - C * e_0",
-            "dq_0 - f_0"
+            "ode(q_0,t) - f_0"
         ]
     },
     "cv_R": {
@@ -828,7 +829,7 @@
                 ]
             },
             "q_init": {
-                "description": "Generalised position",
+                "description": "Initial generalised position",
                 "units": "mL",
                 "symbol": "q_init",
                 "value": 1
@@ -846,13 +847,6 @@
                 "symbol": "v"
             }
         },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-            }
-        },
         "state_vars": {
             "q_0": {
                 "description": "Generalised position",
@@ -863,7 +857,7 @@
         },
         "constitutive_relations": [
             "q_0 - C * e_0",
-            "dq_0 - f_0"
+            "ode(q_0,t) - f_0"
         ]
     },
     "cv_I": {
@@ -890,13 +884,11 @@
                 "description": "Generalised Flow",
                 "units": "mL_per_s",
                 "symbol": "v"
-            }
-        },
-        "voi": {
-            "t": {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
+            },
+            "P_0": {
+                "description": "Generalised power",
+                "units": "mmHg_mL_per_s",
+                "symbol": "P"
             }
         },
         "state_vars": {
@@ -904,7 +896,19 @@
                 "description": "Generalised momentum",
                 "units": "mmHg_mL2_per_s3",
                 "symbol": "p",
-                "voi": "t"
+                "value": "p_init"
+            },
+            "A": {
+                "description": "Generalised activity",
+                "units": "mmHg_mL",
+                "symbol": "A",
+                "value": 0
+            },
+            "E": {
+                "description": "Generalised energy",
+                "units": "mmHg_mL",
+                "symbol": "E",
+                "value": 0
             }
         },
         "params": {
@@ -917,11 +921,17 @@
                     0,
                     "inf"
                 ]
+            },
+            "p_init": {
+                "description": "Initial generalised momentum",
+                "units": "mmHg_mL2_per_s3",
+                "symbol": "p_init",
+                "value": 1
             }
         },
         "constitutive_relations": [
             "p_0 - L*f_0",
-            "dp_0 - e_0"
+            "ode(p_0, t) - e_0"
         ]
     }
 }
