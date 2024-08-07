@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 from utilities import *
 from sympy import *
+import pandas as pd
 
 defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","farad","gram","gray","henry",
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
@@ -512,54 +513,134 @@ def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
             bg_dict[eName[i]]['params']['K']['value']=K_
             var_name=bg_dict[eName[i]]['params']['K']['symbol']
             latex_str=toLatexStr(var_name)
-            writer.writerow([latex_str, K_])
+            writer.writerow([latex_str, K_])     
 
-def EA_BG(bg_dict, bg_ea_components, bg_ea_dict, voi):
-    """ Derive the energy analysis and activity equations for the bond graph model
+def build_AdjacencyMatrix(bg_dict):
+    """
+    Build the adjacency matrix for the bond graph model
 
     Parameters
     ----------
     bg_dict : dict
         The dictionary of the bond graph model
-    bg_ea_components : dict
-        The dictionary of energy analysis for bond graph components
-    bg_ea_dict : dict
-        The dictionary of energy analysis for the bond graph model
-    voi : dict
-        The dictionary of the variables of integration
-        The default is {
-                "description": "Time",
-                "units": "second",
-                "symbol": "t"
-        }
 
     Returns
     -------
-    None
-       
-    """
+    A : numpy.ndarray
+        The adjacency matrix, A[i][j]=1 if there is a connection from i to j
+    B:  list
+        The list of the nodes (i.e.,component,port#) 
+    P_bond : 2d list
+        The power expression of each bond in the model
+        P[i][j] is the power expression 
+    P_comp : dict
+        The energy expression of each component in the model
+        key is the component name
+        Pi is the power expression of the component i  
+    """ 
+    B=[]
     for key, comp in bg_dict.items():
         if 'ports' in comp.keys():
-            bg_ea_dict[key]=copy.deepcopy(bg_ea_components[comp['id']]) # bg_ea_components and bg_components have the same id
-            bg_ea_dict[key]['constitutive_eqs']=[]
+            for port in comp['ports']:
+                B+=[key+','+port]
+
+    A=np.zeros((len(B),len(B)))
+    P_comp={}
+    # create 2d list for the power expression
+    P_bond=[['' for i in range(len(B))] for j in range(len(B))]
+    for key, comp in bg_dict.items():
+        if 'ports' in comp.keys():
             P_sum=0
             for port in comp['ports']:
                 e_str=comp['vars']['e_'+port]['expression'] if 'expression' in comp['vars']['e_'+port].keys() else comp['vars']['e_'+port]['symbol']
                 f_str=comp['vars']['f_'+port]['expression'] if 'expression' in comp['vars']['f_'+port].keys() else comp['vars']['f_'+port]['symbol']
                 P_symp=sympify(e_str)*sympify(f_str)
-                bg_ea_dict[key]['vars']['P_'+port]['symbol']=bg_ea_dict[key]['vars']['P_'+port]['symbol']+ '_' + key
-                bg_ea_dict[key]['vars']['P_'+port]['expression']=ccode(P_symp)
-                if comp['ports'][port]['direction']=='in':                                     
+                if comp['ports'][port]['direction']=='in':
                     P_sum+=P_symp
                 elif comp['ports'][port]['direction']=='out':
                     P_sum+=-P_symp
-            bg_ea_dict[key]['vars']['P_sum']['symbol']=bg_ea_dict[key]['vars']['P_sum']['symbol']+ '_' + key
-            bg_ea_dict[key]['state_vars']['A']['symbol']=bg_ea_dict[key]['state_vars']['A']['symbol']+ '_' + key
-            bg_ea_dict[key]['state_vars']['E']['symbol']=bg_ea_dict[key]['state_vars']['E']['symbol']+ '_' + key
-            bg_ea_dict[key]['constitutive_eqs']+=[[bg_ea_dict[key]['vars']['P_sum']['symbol'], ccode(P_sum),'']]
-            bg_ea_dict[key]['constitutive_eqs']+=[[bg_ea_dict[key]['state_vars']['A']['symbol'], ccode(Abs(P_sum)),voi['symbol']]]
-            bg_ea_dict[key]['constitutive_eqs']+=[[bg_ea_dict[key]['state_vars']['E']['symbol'], ccode(P_sum),voi['symbol']]]      
+                else:
+                    raise ValueError('The port direction is not correct')
+                for i in range(len(comp['ports'][port]['in'])):
+                    cIndex=comp['ports'][port]['in'][i][0]
+                    portN=comp['ports'][port]['in'][i][1]
+                    indexi=B.index(key+','+port)
+                    indexj=B.index(cIndex+','+portN)
+                    A[indexj][indexi]=1
+                    P_bond[indexj][indexi]=P_symp
+                for i in range(len(comp['ports'][port]['out'])):
+                    cIndex=comp['ports'][port]['out'][i][0]
+                    portN=comp['ports'][port]['out'][i][1]
+                    indexi=B.index(key+','+port)
+                    indexj=B.index(cIndex+','+portN)
+                    A[indexi][indexj]=1
+                    P_bond[indexi][indexj]=P_symp
+            P_comp[key]=P_sum
             
+    return A, B, P_bond, P_comp 
+
+def calc_bond_energy(bg_dict,result_csv):
+    """
+    Calculate the energy and activity of each bond in the model
+
+    Parameters
+    ----------
+    bg_dict : dict
+        The dictionary of the bond graph model
+    simResults : csv file
+        The simulation results of the bond graph model
+        The csv file with the following format:
+        t, var1, var2, ...
+
+    Returns
+    -------
+    P_bond_vec : numpy.ndarray
+        The power vector of each bond in the model
+    E_bond_val: numpy.ndarray
+        The energy value of each bond in the model
+        E is the integral of the power over time
+    A_bond_val: numpy.ndarray
+        The activity value of each bond in the model
+        A is the integral of the absolute power over time
+    P_comp_vec : numpy.ndarray
+        The power vector of each component in the model
+    E_comp_val: numpy.ndarray
+        The energy value of each component in the model
+    A_comp_val: numpy.ndarray
+        The activity value of each component in the model     
+    """     
+    A, B, P_bond, P_comp = build_AdjacencyMatrix(bg_dict)
+    # get the length of the simulation results
+    N=len(simResults_df['t'])
+    simResults_df= pd.read_csv(result_csv)
+    P_bond_vec=np.zeros((len(B),len(B)),N)
+    E_bond_val=np.zeros((len(B),len(B)))
+    A_bond_val=np.zeros((len(B),len(B))) 
+    E_comp_val=np.zeros(len(P_comp))
+    A_comp_val=np.zeros(len(P_comp))
+    P_comp_vec=np.zeros(len(P_comp),N)   
+    # get A[i][j]=1 if there is a connection from i to j
+    for i in range(len(B)):
+        for j in range(len(B)):
+            if A[i][j]==1:
+                # translate the sympy expression to python function based on free symbols
+                list_vars=list(P_bond[i][j].free_symbols)
+                list_vars_str=[str(var) for var in list_vars]
+                P_symp_func=lambdify(list_vars,P_bond[i][j],'numpy')
+                P_bond_vec[i][j]=P_symp_func(*[simResults_df[var][0] for var in list_vars_str])
+                E_bond_val[i][j]=np.trapz(P_bond_vec[i][j],simResults_df['t'])
+                A_bond_val[i][j]=np.trapz(np.abs(P_bond_vec[i][j]),simResults_df['t'])                   
+    for i in P_comp.keys():
+        list_vars=list(P_comp[i].free_symbols)
+        list_vars_str=[str(var) for var in list_vars]
+        P_symp_func=lambdify(list_vars,P_comp[i],'numpy')
+        P_comp_vec[i]=P_symp_func(*[simResults_df[var][0] for var in list_vars_str])
+        E_comp_val[i]=np.trapz(P_comp_vec[i],simResults_df['t'])
+        A_comp_val[i]=np.trapz(np.abs(P_comp_vec[i]),simResults_df['t'])
+
+    return P_bond_vec, E_bond_val, A_bond_val, P_comp_vec, E_comp_val, A_comp_val
+
+
 if __name__ == "__main__": 
 
     file_path='./data/'
@@ -603,9 +684,11 @@ if __name__ == "__main__":
     bg_ea_components_json='BG_EA_components.json'
     bg_ea_components=load_json(bg_ea_components_json)
     bg_ea_dict={}
-    EA_BG(bg_dict, bg_ea_components, bg_ea_dict,voi)
-    json_file=file_path+'SLC2_BG_EA.json'
-    save_json(bg_ea_dict, json_file)
+    A, B, P_bond, P_comp = build_AdjacencyMatrix(bg_dict)
+    print(A)
+    print(B)
+    print(P_bond)
+    print(P_comp)
 
         
 
