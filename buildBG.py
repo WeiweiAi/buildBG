@@ -13,7 +13,7 @@ params_common=['R','T','F']
 
 def load_matrix(matrix):
     """
-    Load stoichiometric matrices from csv files
+    Load stoichiometric matrix from a csv file
     The components are defined in BG_components.
     The ID of the components is the key of the dictionary BG_components.
     The components in the row take the potential as the input and the flow as the output, and we call them F components.
@@ -28,7 +28,7 @@ def load_matrix(matrix):
     Parameters
     ----------
     matrix : str
-        The file path of the forward stoichiometric matrix
+        The file path of the stoichiometric matrix
     
     Returns
     -------
@@ -74,7 +74,7 @@ def load_matrix(matrix):
     
     return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
-def build_BG_Dict(matrix,bg_components,bg_dict, direction,file_path='./'):
+def build_BG_Dict(matrix,bg_components,bg_dict, direction):
     """
     Build the dictionary for the components and connections from the stoichiometric matrix
     Parameters
@@ -96,24 +96,21 @@ def build_BG_Dict(matrix,bg_components,bg_dict, direction,file_path='./'):
         The direction of the flow
         'e2f': from E (0 node) to F (1 node)
         'f2e': from F (1 node) to E (0 node)
-    file_path : str, optional
-        The file path of the csv files
-        The default is './'.
     Returns
     -------
     None
 
     side effect
     ------------
-    Update the bg_dict dictionary
+    Update the bg_dict dictionary with the components and connections from the stoichiometric matrix
     """
-    eName, eID, ePort, fName, fID, fPort,N=load_matrix(file_path+matrix)
+    eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
     cNames=eName+fName
     cIDs=eID+fID
     # update the symbols of the parameters, variables and state variables for the components  
     for i in range(len(cNames)):
         cID=cIDs[i]
-        cIndex=cNames[i]# CName is the key for the dictionary, make it unique; 
+        cIndex=cNames[i]# cIndex is the key for the dictionary, make it unique; 
         if cID in bg_components.keys() and cIndex not in bg_dict.keys():
             bg_dict[cIndex]=copy.deepcopy(bg_components[cID])
             bg_dict[cIndex]['constitutive_eqs']=[]
@@ -515,7 +512,7 @@ def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
             latex_str=toLatexStr(var_name)
             writer.writerow([latex_str, K_])     
 
-def build_AdjacencyMatrix(bg_dict):
+def build_AdjacencyMatrix_(bg_dict):
     """
     Build the adjacency matrix for the bond graph model
     Derive the sympy expression of the power on each bond in the model
@@ -605,18 +602,21 @@ def build_AdjacencyMatrix(bg_dict):
             P_comp_expr[key]=P_sum      
     return A, comp_port, P_bond_expr, P_comp_expr, e_comp_port_expr, f_comp_port_expr 
 
-def calc_bond_energy(bg_dict,result_csv):
+def calc_energy(bg_json,result_csv):
     """
     Calculate the energy and activity of each bond in the model
 
     Parameters
     ----------
-    bg_dict : dict
-        The dictionary of the bond graph model
-    simResults : csv file
-        The simulation results of the bond graph model
+    bg_json : str, the fullpath to a json file
+        The json file of the bond graph model
+
+    result_csv : str, the fullpath to a csv file
         The csv file with the following format:
         t, var1, var2, ...
+        Note that the first column should be the time variable
+        Note that the variables should be the same as the symbols in the bond graph model
+
 
     Returns
     -------
@@ -626,23 +626,25 @@ def calc_bond_energy(bg_dict,result_csv):
     ------------
     Save the power vector of each bond to a csv file 'bond_power.csv'
     Save the power vector of each component to a csv file 'comp_power.csv'
-    Save the energy and activity of each component to a json file 'activity.json'
     save the adjacency matrix to a csv file 'Adjacency.csv'
     save the effort of each port to a csv file 'e_comp_port.csv'
     save the flow of each port to a csv file 'f_comp_port.csv'
+    Save the energy and activity of each component to a json file 'activity.json'
     """ 
+    bg_dict=load_json(bg_json)
+    simResults_df= pd.read_csv(result_csv)
+    # get the path of the csv file
     csv_path=Path(result_csv).parent
     csv_file_name=Path(result_csv).stem 
     csv_file_power_bond=csv_path/(csv_file_name+'_bond_power.csv')
     csv_file_power_comp=csv_path/(csv_file_name+'_comp_power.csv')
     csv_file_e_comp_port=csv_path/(csv_file_name+'_e_comp_port.csv')
-    csv_file_f_comp_port=csv_path/(csv_file_name+'_f_comp_port.csv')   
-    A, comp_port, P_bond_expr, P_comp_expr, e_comp_port_expr, f_comp_port_expr = build_AdjacencyMatrix(bg_dict)
-    # get the length of the simulation results
-    simResults_df= pd.read_csv(result_csv)
-    # save A to a csv file
-    df_A=pd.DataFrame(A)
-    csv_file_A=csv_path/(csv_file_name+'_Adjacency.csv')
+    csv_file_f_comp_port=csv_path/(csv_file_name+'_f_comp_port.csv') 
+    csv_file_A=csv_path/(csv_file_name+'_Adjacency.csv')  
+    json_file=csv_path/(csv_file_name+'_activity.json')
+
+    A, comp_port, P_bond_expr, P_comp_expr, e_comp_port_expr, f_comp_port_expr = build_AdjacencyMatrix_(bg_dict)
+    df_A=pd.DataFrame(A)    
     df_A.to_csv(csv_file_A, index=False)
  
     E_comp_val=np.zeros(len(P_comp_expr))
@@ -654,14 +656,17 @@ def calc_bond_energy(bg_dict,result_csv):
     df_e_comp_port=pd.DataFrame()
     df_f_comp_port=pd.DataFrame()    
     df_power_comp=pd.DataFrame(columns=bg_dict.keys())
+
     bond_ij=[]# save the list of bond (i,j)
     E_bond=[] # save the list of  bond energy
     A_bond=[] # save the list of  bond activity
     P_bond_expr_=[]# save the list of bond power expression
     P_comp_expr_=[]# save the list of component power expression
-    json_file=csv_path/(csv_file_name+'_activity.json')
-    # get A[i][j]=1 if there is a connection from i to j
+    e_comp_port_expr_=[]# save the list of effort expression of the ports
+    f_comp_port_expr_=[]# save the list of flow expression of the ports
+    
     for i in range(len(comp_port)):
+        # calculate the energy and activity of each port
         list_vars=list(e_comp_port_expr[i].free_symbols)
         list_vars_str=[str(var) for var in list_vars]
         e_symp_func=lambdify(list_vars,e_comp_port_expr[i],'numpy')
@@ -670,6 +675,10 @@ def calc_bond_energy(bg_dict,result_csv):
         list_vars_str=[str(var) for var in list_vars]
         f_symp_func=lambdify(list_vars,f_comp_port_expr[i],'numpy')
         df_f_comp_port[i]=f_symp_func(*[simResults_df[var] for var in list_vars_str])
+        e_comp_port_expr_+=[str(e_comp_port_expr[i])]
+        f_comp_port_expr_+=[str(f_comp_port_expr[i])]
+
+        # calculate the energy and activity of each bond
         for j in range(len(comp_port)):
             if A[i][j]==1:
                 # translate the sympy expression to python function based on free symbols
@@ -682,7 +691,8 @@ def calc_bond_energy(bg_dict,result_csv):
                 df_power_bond[f'{i}_{j}']=P_bond_vec 
                 bond_ij+=[(i,j)] 
                 P_bond_expr_+=[str(P_bond_expr[i][j])]
-                   
+
+    # calculate the energy and activity of each component              
     A_total=0
     i=0
     for key in P_comp_expr.keys():
@@ -698,37 +708,46 @@ def calc_bond_energy(bg_dict,result_csv):
         i+=1
            
     AI_comp_val=A_comp_val/A_total
-    df_power_bond.to_csv(csv_file_power_bond, index=False)
-    df_power_comp.to_csv(csv_file_power_comp, index=False)
+    
     dict_activity={'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
                    'Bond Energy': E_bond, 'Bond Activity': A_bond, 'Bond_ij': bond_ij, 'Comp_port': comp_port,
-                   'P_bond_expr': P_bond_expr_, 'P_comp_expr': P_comp_expr_}
-    save_json(dict_activity, json_file)
+                   'P_bond_expr': P_bond_expr_, 'P_comp_expr': P_comp_expr_, 'e_comp_port': e_comp_port_expr_, 'f_comp_port': f_comp_port_expr_}
+    
+    # save the results to csv and json files
+    df_power_bond.to_csv(csv_file_power_bond, index=False)
+    df_power_comp.to_csv(csv_file_power_comp, index=False)
     df_e_comp_port.to_csv(csv_file_e_comp_port, index=False)
-    df_f_comp_port.to_csv(csv_file_f_comp_port, index=False)
+    df_f_comp_port.to_csv(csv_file_f_comp_port, index=False)    
+    save_json(dict_activity, json_file)   
+
     return 
 
 
 if __name__ == "__main__": 
-
+    
+    # specify the csv files for the stoichiometric matrix
     file_path='./data/'
-    fmatrix='SLC2_f_1.csv'
-    rmatrix='SLC2_r_1.csv'
+    fmatrix=file_path+'SLC2_f_1.csv'
+    rmatrix=file_path+'SLC2_r_1.csv'
+   
+    # load the predefined bond graph components
     bg_components_json='BG_components.json'
     bg_components=load_json(bg_components_json)    
-    bg_dict={}
-    voi={'description': 'Time', 'units': 'second', 'symbol': 't'}   
+    
+    # build the bond graph model
+    bg_dict={}       
     direction = 'e2f'
-    build_BG_Dict(fmatrix,bg_components,bg_dict,direction,file_path=file_path)
+    build_BG_Dict(fmatrix,bg_components,bg_dict,direction)
     direction = 'f2e'
-    build_BG_Dict(rmatrix,bg_components,bg_dict,direction,file_path=file_path)
+    build_BG_Dict(rmatrix,bg_components,bg_dict,direction)
     
+    # update the equations of the bond graph model
+    voi={'description': 'Time', 'units': 'second', 'symbol': 't'}
     update_BG_eqn(bg_dict,voi)
-    # dump the bg_dict to a json file, which has the same name and path as the csv file (using Path)
-    
-    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(file_path+fmatrix)
-    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(file_path+rmatrix)
-
+     
+    # update the BG parameters for the biochemical reactions
+    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
+    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
     V=1
     V_o=90
     h=0.726;g=12.1;c=1113;d=90.3;a=500000*V_o;b=a*9.5;f=3000*V_o;e=12.8459*f
@@ -742,16 +761,15 @@ if __name__ == "__main__":
     V_o=0.09
     V_E=1
     Ws=np.array([[V_i,V_o,V_E,V_E,V_E,V_E]]).transpose()
-
     kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
     update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv')
-   # EA_BG(bg_dict)
+
+    # save the bond graph model to a json file
     json_file=file_path+'SLC2_BG.json'    
     save_json(bg_dict, json_file)   
 
-    bg_ea_components_json='BG_EA_components.json'
-    bg_ea_components=load_json(bg_ea_components_json)
-    calc_bond_energy(bg_dict,file_path+'dummy_results.csv')
+    # calculate the energy and activity of the bond graph model
+    calc_energy(json_file,file_path+'dummy_results.csv')
 
 
 
