@@ -43,34 +43,7 @@ R = {
 
         ]
     }
-R_EA = {'componentID': 'R',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-    }
+
 C = {
         "description": "Generalised Linear Capacitor",
         "domain": "Electrical",
@@ -125,34 +98,7 @@ C = {
             "ode(q_0,t) - f_0",
         ]
     }
-C_EA = {'componentID': 'C',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-    }
+
 I = {
         "description": "Generalised Linear Inductor",
         "domain": "Electrical",
@@ -206,34 +152,7 @@ I = {
             "ode(p_0,t) - e_0",
         ]
     }
-I_EA = {'componentID': 'I',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-    }
+
 Se = {
         "description": "Effort Source",
         "domain": "Electrical",
@@ -270,34 +189,6 @@ Se = {
         ]
     }
 
-Se_EA = {'componentID': 'Se',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 Sf = {
         "description": "Flow Source",
@@ -334,34 +225,6 @@ Sf = {
         ]
     }
 
-Sf_EA = {'componentID': 'Sf',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}   
 
 TF = {
         "description": "Linear Transformer",
@@ -416,40 +279,6 @@ TF = {
             "f_0 - r * f_1",
         ]
     }
-
-TF_EA = {'componentID': 'TF',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_0",
-            },
-            "P_1": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_1",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 GY = {
         "description": "Linear Gyrator",
@@ -560,34 +389,6 @@ Ce = {
         ]
      }
 
-Ce_EA = {'componentID': 'Ce',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 Re ={
         "description": "Biochemical Reaction",
@@ -640,47 +441,12 @@ Re ={
                   "description": "Generalised Flow",
                   "units": "fmol_per_s",
                   "symbol": "v",
-                  "expression": "v" # exclude it from the variable list
               },
         },
         "constitutive_relations":[
           "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ]
     }
-
-Re_EA = {'componentID': 'Re',
-        "vars":{
-             "P_0": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_0",
-              },
-              "P_1": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_1",
-             },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 zF = {
         "description": "Biochemical Transformer",
@@ -741,39 +507,6 @@ zF = {
         ]
     }
 
-zF_EA = {'componentID': 'zF',
-         "vars":{
-                "P_0": {
-                    "description": "Generalised power",
-                    "units": "fJ_per_s",
-                    "symbol": "P_0",
-                },
-                "P_1": {
-                    "description": "Generalised power",
-                    "units": "fJ_per_s",
-                    "symbol": "P_1",
-                },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-            },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "fJ",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "fJ",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 ch_Se = {
           "description":"Concentration of Chemical Species",
@@ -831,35 +564,6 @@ ch_Se = {
           ]
         }
 
-ch_Se_EA = {'componentID': 'ch_Se',
-            "vars":{
-                "P_0": {
-                    "description": "Generalised power",
-                    "units": "fJ_per_s",
-                    "symbol": "P",
-                },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "fJ_per_s",
-                "symbol": "P_sum",
-            }
-            },
-            "state_vars": {
-                "A": {
-                    "description": "Generalised activity",
-                    "units": "fJ",
-                    "symbol": "A",
-                    "value": 0,
-                },
-                "E": {
-                    "description": "Generalised energy",
-                    "units": "fJ",
-                    "symbol": "E",
-                    "value": 0,
-                }
-            },
-}
-
 m_Se = {
             "description": "Effort Source",
             "domain": "Mechanical",
@@ -894,34 +598,6 @@ m_Se = {
                 "e_0 - e"
             ]
         }
-m_Se_EA = {'componentID': 'm_Se',
-            "vars":{
-                "P_0": {
-                    "description": "Generalised power",
-                    "units": "J_per_s",
-                    "symbol": "P",
-                },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P_sum",
-            }
-            },
-            "state_vars": {
-                "A": {
-                    "description": "Generalised activity",
-                    "units": "J",
-                    "symbol": "A",
-                    "value": 0,
-                },
-                "E": {
-                    "description": "Generalised energy",
-                    "units": "J",
-                    "symbol": "E",
-                    "value": 0,
-                }
-            },
-}
 m_Sf = {
             "description": "Flow Source",
             "domain": "Mechanical",
@@ -956,34 +632,7 @@ m_Sf = {
                 "f_0 - f"
             ]
         }
-m_Sf_EA = {'componentID': 'm_Sf',
-            "vars":{
-                "P_0": {
-                    "description": "Generalised power",
-                    "units": "J_per_s",
-                    "symbol": "P",
-                },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P_sum",
-            }
-            },
-            "state_vars": {
-                "A": {
-                    "description": "Generalised activity",
-                    "units": "J",
-                    "symbol": "A",
-                    "value": 0,
-                },
-                "E": {
-                    "description": "Generalised energy",
-                    "units": "J",
-                    "symbol": "E",
-                    "value": 0,
-                }
-            },
-}
+
 m_R = {
         "description": "Generalised Linear Resistor",
         "domain": "Mechanical",
@@ -1022,35 +671,6 @@ m_R = {
             "e_0 - f_0*r"
         ]
     }
-
-m_R_EA = {'componentID': 'm_R',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "J",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "J",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 m_C = {
         "description": "Generalised Linear Capacitor",
@@ -1106,34 +726,6 @@ m_C = {
         ]
     }
 
-m_C_EA = {'componentID': 'm_C',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "J_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "J",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "J",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 cv_R = {
         "description": "Generalised Linear Resistor",
@@ -1173,35 +765,6 @@ cv_R = {
             "e_0 - f_0*r"
         ]
     }
-
-cv_R_EA = {'componentID': 'cv_R',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "mmHg_mL",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "mmHg_mL",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 cv_C = {
         "description": "Generalised Linear Capacitor",
@@ -1256,35 +819,6 @@ cv_C = {
             "ode(q_0,t) - f_0"
         ]
     }
-
-cv_C_EA = {'componentID': 'cv_C',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "mmHg_mL",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "mmHg_mL",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
 
 cv_I = {
         "description": "Generalised Linear Inductor",
@@ -1357,35 +891,6 @@ cv_I = {
         ]
     }
 
-cv_I_EA = {'componentID': 'cv_I',
-        "vars":{
-            "P_0": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P",
-            },
-            "P_sum": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P_sum",
-            }
-        },
-        "state_vars": {
-            "A": {
-                "description": "Generalised activity",
-                "units": "mmHg_mL",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "mmHg_mL",
-                "symbol": "E",
-                "value": 0,
-            }
-        },
-}
-
 def BG_components():
     components = {
         "R": R,
@@ -1409,35 +914,9 @@ def BG_components():
     }
     return components 
 
-def BG_EA_components():
-    components = {
-        "R": R_EA,
-        "C": C_EA,
-        "I": I_EA,
-        "Se": Se_EA,
-        "Sf": Sf_EA,
-        "TF": TF_EA,
-        "Ce": Ce_EA,
-        "Re": Re_EA,
-        "zF": zF_EA,
-        "ch_Se": ch_Se_EA,
-        "m_Se": m_Se_EA,
-        "m_Sf": m_Sf_EA,
-        "m_R": m_R_EA,
-        "m_C": m_C_EA,
-        "cv_R": cv_R_EA,
-        "cv_C": cv_C_EA,
-        "cv_I": cv_I_EA,
-    }
-    return components
-
 if __name__ == "__main__": 
 
     json_file = 'BG_components.json'
     comp_dict = BG_components()
-    with open(json_file, 'w') as f:
-        json.dump(comp_dict, f,indent=4)
-    json_file = 'BG_EA_components.json'
-    comp_dict = BG_EA_components()
     with open(json_file, 'w') as f:
         json.dump(comp_dict, f,indent=4)

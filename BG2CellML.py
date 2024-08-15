@@ -146,6 +146,7 @@ def json2CellMLV1_model(json_file, model_name, component_name):
     math_element.set('xmlns', math_ns)
     # Collect parameters, variables, and state variables 
     param_set = set()
+    var_set = set()
     param_attrs = []
     var_attrs = []
     state_var_attrs = []
@@ -173,16 +174,17 @@ def json2CellMLV1_model(json_file, model_name, component_name):
             if 'expression' in comp_dict[comp]['vars'][var]:
                 pass # skip variables that are defined by expressions
             else:
-                variable_attributes = {
-                    'name': comp_dict[comp]['vars'][var]['symbol'],
-                    'units': comp_dict[comp]['vars'][var]['units']
-                }
-                units_set.add(comp_dict[comp]['vars'][var]['units'])
-                if 'IO' in comp_dict[comp]['vars'][var]:
-                    variable_attributes['public_interface'] = comp_dict[comp]['vars'][var]['IO']
-                else:
-                    pass # default is internal
-                var_attrs.append(variable_attributes)
+                if comp_dict[comp]['vars'][var]['symbol'] not in var_set:
+                    var_set.add(comp_dict[comp]['vars'][var]['symbol'])
+                    variable_attributes = {
+                        'name': comp_dict[comp]['vars'][var]['symbol'],
+                        'units': comp_dict[comp]['vars'][var]['units']
+                    }
+                    units_set.add(comp_dict[comp]['vars'][var]['units'])
+                    if 'IO' in comp_dict[comp]['vars'][var]:
+                        variable_attributes['public_interface'] = comp_dict[comp]['vars'][var]['IO']                
+                    var_attrs.append(variable_attributes)
+                    
         if 'state_vars' in comp_dict[comp].keys():
             for state_var in comp_dict[comp]['state_vars']:
                 q_init = comp_dict[comp]['state_vars'][state_var]['value']
@@ -263,10 +265,8 @@ if __name__ == "__main__":
 
     param_model=json2CellMLV1_param('./data/SLC2_BG.json', 'test_model_param', 'param_component')
     test_model= json2CellMLV1_model('./data/SLC2_BG.json', 'test_model', 'component_test')
-    ea_model= json2CellMLV1_model('./data/SLC2_BG_EA.json', 'ea_model', 'component_ea')
     write_cellmlV1(param_model,'test_model_param.cellml')
     write_cellmlV1(test_model,'test_model.cellml')
-    write_cellmlV1(ea_model,'ea_model.cellml')
     
   #  to_cellmlV1_params(comp_dict, model_name='params_BG',model_file='params_BG.txt')
   #  to_cellmlV1_models(comp_dict, model_name='GLUT2_BG',model_file='GLUT2_BG.txt',params_file='params_BG.cellml')

@@ -518,36 +518,48 @@ def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
 def build_AdjacencyMatrix(bg_dict):
     """
     Build the adjacency matrix for the bond graph model
+    Derive the sympy expression of the power on each bond in the model
+    Derive the sympy expression of the power flowing into each component in the model
 
     Parameters
     ----------
     bg_dict : dict
         The dictionary of the bond graph model
+        Requires the bond information for each component:
+        comp['ports'][port]['in'] is a list of the inward connections
+        comp['ports'][port]['out'] is a list of the outward connections
+        comp['ports'][port]['type'] is the type of the port (e_in, e_out)
+        comp['ports'][port]['direction'] is the positive direction of flow (in or out) relative to the component
+        comp['vars']['e_'+port]['expression'] is the sympy expression of the potential on the port, optional
+        comp['vars']['f_'+port]['expression'] is the sympy expression of the flow on the port, optional
+        comp['vars']['e_'+port]['symbol'] is the sympy symbol of the potential on the port
+        comp['vars']['f_'+port]['symbol'] is the sympy symbol of the flow on the port
 
     Returns
     -------
     A : numpy.ndarray
         The adjacency matrix, A[i][j]=1 if there is a connection from i to j
-    B:  list
-        The list of the nodes (i.e.,component,port#) 
-    P_bond : 2d list
-        The power expression of each bond in the model
-        P[i][j] is the power expression 
-    P_comp : dict
+    comp_port:  list of str
+        The list of the nodes (i.e.,'component,port#') 
+    P_bond_expr : 2d list of sympy expression
+        The sympy expression of power on each bond in the model
+        P_bond_expr[i][j] is the sympy expression of power on the bond from i to j 
+    P_comp_expr : dict
         The energy expression of each component in the model
         key is the component name
-        Pi is the power expression of the component i  
+        P_comp_expr[key] is the sympy expression of power flowing into component key  
     """ 
-    B=[]
+    comp_port=[]
     for key, comp in bg_dict.items():
         if 'ports' in comp.keys():
             for port in comp['ports']:
-                B+=[key+','+port]
+                comp_port+=[key+','+port]
 
-    A=np.zeros((len(B),len(B)))
-    P_comp={}
+    A=np.zeros((len(comp_port),len(comp_port)))
+    # create a dictionary for the power expression
+    P_comp_expr={}
     # create 2d list for the power expression
-    P_bond=[['' for i in range(len(B))] for j in range(len(B))]
+    P_bond_expr=[['' for i in range(len(comp_port))] for j in range(len(comp_port))]
     for key, comp in bg_dict.items():
         if 'ports' in comp.keys():
             P_sum=0
@@ -561,23 +573,33 @@ def build_AdjacencyMatrix(bg_dict):
                     P_sum+=-P_symp
                 else:
                     raise ValueError('The port direction is not correct')
-                for i in range(len(comp['ports'][port]['in'])):
+                indexi=comp_port.index(key+','+port) # index of the port in the list B
+                for i in range(len(comp['ports'][port]['in'])): # inwards: indexj to indexi
                     cIndex=comp['ports'][port]['in'][i][0]
-                    portN=comp['ports'][port]['in'][i][1]
-                    indexi=B.index(key+','+port)
-                    indexj=B.index(cIndex+','+portN)
+                    portN=comp['ports'][port]['in'][i][1]                    
+                    indexj=comp_port.index(cIndex+','+portN)
                     A[indexj][indexi]=1
-                    P_bond[indexj][indexi]=P_symp
-                for i in range(len(comp['ports'][port]['out'])):
+                    if comp['ports'][port]['type']=='e_in':
+                        e_bond_str=bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol']
+                        f_bond_str=f_str
+                    elif comp['ports'][port]['type']=='e_out':
+                        e_bond_str=e_str
+                        f_bond_str=bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol']
+                    P_bond_expr[indexj][indexi]=sympify(e_bond_str)*sympify(f_bond_str)
+                for i in range(len(comp['ports'][port]['out'])): # outwards: indexi to indexj
                     cIndex=comp['ports'][port]['out'][i][0]
                     portN=comp['ports'][port]['out'][i][1]
-                    indexi=B.index(key+','+port)
-                    indexj=B.index(cIndex+','+portN)
+                    indexj=comp_port.index(cIndex+','+portN)
                     A[indexi][indexj]=1
-                    P_bond[indexi][indexj]=P_symp
-            P_comp[key]=P_sum
-            
-    return A, B, P_bond, P_comp 
+                    if comp['ports'][port]['type']=='e_in':
+                        e_bond_str=bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol']
+                        f_bond_str=f_str
+                    elif comp['ports'][port]['type']=='e_out':
+                        e_bond_str=e_str
+                        f_bond_str=bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol']
+                    P_bond_expr[indexi][indexj]=sympify(e_bond_str)*sympify(f_bond_str)
+            P_comp_expr[key]=P_sum      
+    return A, comp_port, P_bond_expr, P_comp_expr 
 
 def calc_bond_energy(bg_dict,result_csv):
     """
@@ -607,38 +629,85 @@ def calc_bond_energy(bg_dict,result_csv):
     E_comp_val: numpy.ndarray
         The energy value of each component in the model
     A_comp_val: numpy.ndarray
-        The activity value of each component in the model     
+        The activity value of each component in the model 
+    AI_comp_val: numpy.ndarray
+        The activity index of each component in the model  
+
+    side effect
+    ------------
+    Save the power vector of each bond to a csv file
+    Save the power vector of each component to a csv file
+    Save the activity of each component to a json file
+
     """     
-    A, B, P_bond, P_comp = build_AdjacencyMatrix(bg_dict)
+    A, comp_port, P_bond_expr, P_comp_expr  = build_AdjacencyMatrix(bg_dict)
     # get the length of the simulation results
-    N=len(simResults_df['t'])
     simResults_df= pd.read_csv(result_csv)
-    P_bond_vec=np.zeros((len(B),len(B)),N)
-    E_bond_val=np.zeros((len(B),len(B)))
-    A_bond_val=np.zeros((len(B),len(B))) 
-    E_comp_val=np.zeros(len(P_comp))
-    A_comp_val=np.zeros(len(P_comp))
-    P_comp_vec=np.zeros(len(P_comp),N)   
+    N=len(simResults_df['t']) # number of time points
+    P_bond_vec=np.zeros((len(comp_port),len(comp_port),N))
+    E_bond_val=np.zeros((len(comp_port),len(comp_port)))
+    A_bond_val=np.zeros((len(comp_port),len(comp_port))) 
+    E_comp_val=np.zeros(len(P_comp_expr))
+    A_comp_val=np.zeros(len(P_comp_expr))
+    P_comp_vec=np.zeros((len(P_comp_expr),N))
+    AI_comp_val=np.zeros(len(P_comp_expr))
+    
+    csv_path=Path(result_csv).parent
+    csv_file_name=Path(result_csv).stem
+    # create dataframes for the power vector of each bond and component
+    df_power_bond=pd.DataFrame()
+    csv_file_power_bond=csv_path/(csv_file_name+'_bond_power.csv')
+    csv_file_power_comp=csv_path/(csv_file_name+'_comp_power.csv')
+    df_power_comp=pd.DataFrame(columns=bg_dict.keys())
+    bond_ij=[]# save the list of bond (i,j)
+    E_bond=[] # save the list of  bond energy
+    A_bond=[] # save the list of  bond activity
+    P_bond_expr_=[]# save the list of bond power expression
+    P_comp_expr_=[]# save the list of component power expression
+    json_file=csv_path/(csv_file_name+'_activity.json')
     # get A[i][j]=1 if there is a connection from i to j
-    for i in range(len(B)):
-        for j in range(len(B)):
+    for i in range(len(comp_port)):
+        for j in range(len(comp_port)):
             if A[i][j]==1:
                 # translate the sympy expression to python function based on free symbols
-                list_vars=list(P_bond[i][j].free_symbols)
+                list_vars=list(P_bond_expr[i][j].free_symbols)
                 list_vars_str=[str(var) for var in list_vars]
-                P_symp_func=lambdify(list_vars,P_bond[i][j],'numpy')
-                P_bond_vec[i][j]=P_symp_func(*[simResults_df[var][0] for var in list_vars_str])
+                P_symp_func=lambdify(list_vars,P_bond_expr[i][j],'numpy')
+                P_bond_vec[i][j]=P_symp_func(*[simResults_df[var] for var in list_vars_str])
                 E_bond_val[i][j]=np.trapz(P_bond_vec[i][j],simResults_df['t'])
-                A_bond_val[i][j]=np.trapz(np.abs(P_bond_vec[i][j]),simResults_df['t'])                   
-    for i in P_comp.keys():
-        list_vars=list(P_comp[i].free_symbols)
+                A_bond_val[i][j]=np.trapz(np.abs(P_bond_vec[i][j]),simResults_df['t'])
+                df_power_bond[f'{i}_{j}']=P_bond_vec[i][j] 
+                bond_ij+=[(i,j)] 
+                E_bond+=[E_bond_val[i][j]]
+                A_bond+=[A_bond_val[i][j]]
+                P_bond_expr_+=[str(P_bond_expr[i][j])]
+                   
+    A_total=0
+    i=0
+    for key in P_comp_expr.keys():
+        list_vars=list(P_comp_expr[key].free_symbols)
         list_vars_str=[str(var) for var in list_vars]
-        P_symp_func=lambdify(list_vars,P_comp[i],'numpy')
-        P_comp_vec[i]=P_symp_func(*[simResults_df[var][0] for var in list_vars_str])
+        P_symp_func=lambdify(list_vars,P_comp_expr[key],'numpy')
+        P_comp_vec[i]=P_symp_func(*[simResults_df[var] for var in list_vars_str])
         E_comp_val[i]=np.trapz(P_comp_vec[i],simResults_df['t'])
         A_comp_val[i]=np.trapz(np.abs(P_comp_vec[i]),simResults_df['t'])
-
-    return P_bond_vec, E_bond_val, A_bond_val, P_comp_vec, E_comp_val, A_comp_val
+        A_total+=A_comp_val[i]
+        df_power_comp[key]=P_comp_vec[i]
+        P_comp_expr_+=[str(P_comp_expr[key])]
+        i+=1
+             
+    AI_comp_val=A_comp_val/A_total
+    df_power_bond.to_csv(csv_file_power_bond, index=False)
+    df_power_comp.to_csv(csv_file_power_comp, index=False)
+    dict_activity={'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
+                   'Bond Energy': E_bond, 'Bond Activity': A_bond, 'Bond_ij': bond_ij, 'Comp_port': comp_port,
+                   'P_bond_expr': P_bond_expr_, 'P_comp_expr': P_comp_expr_}
+    save_json(dict_activity, json_file)
+    # save A to a csv file
+    df_A=pd.DataFrame(A)
+    csv_file_A=csv_path/(csv_file_name+'_Adjacency.csv')
+    df_A.to_csv(csv_file_A, index=False)
+    return P_bond_vec, E_bond_val, A_bond_val, P_comp_vec, E_comp_val, A_comp_val, AI_comp_val
 
 
 if __name__ == "__main__": 
@@ -683,12 +752,20 @@ if __name__ == "__main__":
 
     bg_ea_components_json='BG_EA_components.json'
     bg_ea_components=load_json(bg_ea_components_json)
-    bg_ea_dict={}
     A, B, P_bond, P_comp = build_AdjacencyMatrix(bg_dict)
     print(A)
     print(B)
     print(P_bond)
     print(P_comp)
+    P_bond_vec, E_bond_val, A_bond_val, P_comp_vec, E_comp_val, A_comp_val, AI_comp_val=calc_bond_energy(bg_dict,file_path+'dummy_results.csv')
+    print(P_bond_vec)
+    print(E_bond_val)
+    print(A_bond_val)
+    print(P_comp_vec)
+    print(E_comp_val)
+    print(A_comp_val)
+    print(AI_comp_val)
+
 
         
 

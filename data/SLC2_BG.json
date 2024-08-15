@@ -1,451 +1,611 @@
 {
     "Ai": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
                 "in": [
-                    "r4:1"
+                    [
+                        "r4",
+                        "1",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [],
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "1.496e+02",
                 "units": "per_fmol",
-                "symbol": "K_Ai"
+                "symbol": "K_Ai",
+                "value": "1.496e+02"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_Ai"
+                "symbol": "q_init_Ai",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_Ai",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_Ai",
-                "IOType": "out"
+                "symbol": "mu_Ai"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_Ai",
-                "IOType": "in"
+                "expression": "v_r4"
             }
         },
         "constitutive_relations": [
-            "mu_Ai = R*T*ln(K_Ai*q_Ai)",
-            "ode(q_Ai,t) = v_Ai"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_Ai = v_r4"
+        "constitutive_eqs": [
+            [
+                "mu_Ai",
+                "R*T*log(K_Ai*q_Ai)",
+                ""
+            ],
+            [
+                "q_Ai",
+                "v_r4",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_Ai",
+                "v_r4",
+                ""
+            ]
         ]
     },
     "Ao": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
-                "in": [
-                    "r3:-1"
+                "in": [],
+                "out": [
+                    [
+                        "r3",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "1.496e+02",
                 "units": "per_fmol",
-                "symbol": "K_Ao"
+                "symbol": "K_Ao",
+                "value": "1.496e+02"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_Ao"
+                "symbol": "q_init_Ao",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_Ao",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_Ao",
-                "IOType": "out"
+                "symbol": "mu_Ao"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_Ao",
-                "IOType": "in"
+                "expression": "-v_r3"
             }
         },
         "constitutive_relations": [
-            "mu_Ao = R*T*ln(K_Ao*q_Ao)",
-            "ode(q_Ao,t) = v_Ao"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_Ao = -v_r3"
+        "constitutive_eqs": [
+            [
+                "mu_Ao",
+                "R*T*log(K_Ao*q_Ao)",
+                ""
+            ],
+            [
+                "q_Ao",
+                "-v_r3",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_Ao",
+                "-v_r3",
+                ""
+            ]
         ]
     },
     "1": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
                 "in": [
-                    "r1:1",
-                    "r3:-1"
+                    [
+                        "r1",
+                        "1",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [
+                    [
+                        "r3",
+                        "0",
+                        "1"
+                    ]
+                ],
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "33.196",
                 "units": "per_fmol",
-                "symbol": "K_1"
+                "symbol": "K_1",
+                "value": "33.196"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_1"
+                "symbol": "q_init_1",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_1",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_1",
-                "IOType": "out"
+                "symbol": "mu_1"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_1",
-                "IOType": "in"
+                "expression": "v_r1 - v_r3"
             }
         },
         "constitutive_relations": [
-            "mu_1 = R*T*ln(K_1*q_1)",
-            "ode(q_1,t) = v_1"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_1 = v_r1 -v_r3"
+        "constitutive_eqs": [
+            [
+                "mu_1",
+                "R*T*log(K_1*q_1)",
+                ""
+            ],
+            [
+                "q_1",
+                "v_r1 - v_r3",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_1",
+                "v_r1 - v_r3",
+                ""
+            ]
         ]
     },
     "2": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
                 "in": [
-                    "r2:-1",
-                    "r3:1"
+                    [
+                        "r3",
+                        "1",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [
+                    [
+                        "r2",
+                        "0",
+                        "1"
+                    ]
+                ],
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "4.247e+03",
                 "units": "per_fmol",
-                "symbol": "K_2"
+                "symbol": "K_2",
+                "value": "4.247e+03"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_2"
+                "symbol": "q_init_2",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_2",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_2",
-                "IOType": "out"
+                "symbol": "mu_2"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_2",
-                "IOType": "in"
+                "expression": "-v_r2 + v_r3"
             }
         },
         "constitutive_relations": [
-            "mu_2 = R*T*ln(K_2*q_2)",
-            "ode(q_2,t) = v_2"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_2 = -v_r2 +v_r3"
+        "constitutive_eqs": [
+            [
+                "mu_2",
+                "R*T*log(K_2*q_2)",
+                ""
+            ],
+            [
+                "q_2",
+                "-v_r2 + v_r3",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_2",
+                "-v_r2 + v_r3",
+                ""
+            ]
         ]
     },
     "3": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
                 "in": [
-                    "r2:1",
-                    "r4:-1"
+                    [
+                        "r2",
+                        "1",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [
+                    [
+                        "r4",
+                        "0",
+                        "1"
+                    ]
+                ],
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "3.446e+02",
                 "units": "per_fmol",
-                "symbol": "K_3"
+                "symbol": "K_3",
+                "value": "3.446e+02"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_3"
+                "symbol": "q_init_3",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_3",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_3",
-                "IOType": "out"
+                "symbol": "mu_3"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_3",
-                "IOType": "in"
+                "expression": "v_r2 - v_r4"
             }
         },
         "constitutive_relations": [
-            "mu_3 = R*T*ln(K_3*q_3)",
-            "ode(q_3,t) = v_3"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_3 = v_r2 -v_r4"
+        "constitutive_eqs": [
+            [
+                "mu_3",
+                "R*T*log(K_3*q_3)",
+                ""
+            ],
+            [
+                "q_3",
+                "v_r2 - v_r4",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_3",
+                "v_r2 - v_r4",
+                ""
+            ]
         ]
     },
     "4": {
         "description": "Concentration of Chemical Species",
-        "class": "Component",
+        "domain": "biochemical",
+        "id": "Ce",
         "metamodel": "C",
         "ports": {
             "0": {
                 "in": [
-                    "r1:-1",
-                    "r4:1"
+                    [
+                        "r4",
+                        "1",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [
+                    [
+                        "r1",
+                        "0",
+                        "1"
+                    ]
+                ],
+                "type": "e_out",
+                "direction": "in"
             }
         },
+        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
-                "value": "1.992",
                 "units": "per_fmol",
-                "symbol": "K_4"
+                "symbol": "K_4",
+                "value": "1.992"
             },
             "R": {
                 "description": "Universal Gas Constant",
-                "value": 8.31,
                 "units": "J_per_K_mol",
-                "symbol": "R"
+                "symbol": "R",
+                "value": 8.31
             },
             "T": {
                 "description": "Temperature",
-                "value": 293,
                 "units": "kelvin",
-                "symbol": "T"
+                "symbol": "T",
+                "value": 293
             },
             "q_init": {
                 "description": "Initial Molar Quantity",
-                "value": 16.605778811026234,
                 "units": "fmol",
-                "symbol": "q_init_4"
+                "symbol": "q_init_4",
+                "value": 1
             }
         },
         "state_vars": {
             "q_0": {
                 "description": "Molar Quantity",
-                "value": "q_init",
                 "units": "fmol",
                 "symbol": "q_4",
-                "IOType": "out"
+                "value": "q_init"
             }
         },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "mu_4",
-                "IOType": "out"
+                "symbol": "mu_4"
             },
             "f_0": {
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v_4",
-                "IOType": "in"
+                "expression": "-v_r1 + v_r4"
             }
         },
         "constitutive_relations": [
-            "mu_4 = R*T*ln(K_4*q_4)",
-            "ode(q_4,t) = v_4"
+            "e_0 - R*T*log(K*q_0)",
+            "ode(q_0,t) - f_0"
         ],
-        "type": "Ce",
-        "conservation_relations": [
-            "v_4 = -v_r1 +v_r4"
+        "constitutive_eqs": [
+            [
+                "mu_4",
+                "R*T*log(K_4*q_4)",
+                ""
+            ],
+            [
+                "q_4",
+                "-v_r1 + v_r4",
+                "t"
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "v_4",
+                "-v_r1 + v_r4",
+                ""
+            ]
         ]
     },
     "r1": {
         "description": "Biochemical Reaction",
-        "class": "SymmetricComponent",
+        "domain": "biochemical",
+        "id": "Re",
         "metamodel": "R",
         "ports": {
             "0": {
                 "in": [
-                    "4:1"
+                    [
+                        "4",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [],
+                "type": "e_in",
+                "direction": "in"
             },
             "1": {
-                "in": [
-                    "1:-1"
+                "in": [],
+                "out": [
+                    [
+                        "1",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "type": "e_in",
+                "direction": "out"
             }
         },
+        "signals": {},
         "params": {
             "kappa": {
                 "description": "Reaction Rate",
-                "value": "0.365",
                 "units": "fmol_per_s",
+                "value": "0.365",
                 "symbol": "kappa_r1"
             },
             "R": {
@@ -465,54 +625,86 @@
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_f_r1",
-                "IOType": "in"
+                "symbol": "Af_r1",
+                "expression": "mu_4"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v_r1",
-                "IOType": "out"
+                "symbol": "v_r1"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_r_r1",
-                "IOType": "in"
+                "symbol": "Ar_r1",
+                "expression": "mu_1"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v_r1"
             }
         },
         "constitutive_relations": [
-            "v_r1 = kappa_r1*(exp(A_f_r1/(R*T)) - exp(A_r_r1/(R*T)))"
+            "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ],
-        "type": "Re",
-        "conservation_relations": [
-            "A_f_r1 = mu_4",
-            "A_r_r1 = mu_1"
+        "constitutive_eqs": [
+            [
+                "v_r1",
+                "kappa_r1*(-exp(mu_1/(R*T)) + exp(mu_4/(R*T)))",
+                ""
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "Af_r1",
+                "mu_4",
+                ""
+            ],
+            [
+                "Ar_r1",
+                "mu_1",
+                ""
+            ]
         ]
     },
     "r2": {
         "description": "Biochemical Reaction",
-        "class": "SymmetricComponent",
+        "domain": "biochemical",
+        "id": "Re",
         "metamodel": "R",
         "ports": {
             "0": {
                 "in": [
-                    "2:1"
+                    [
+                        "2",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [],
+                "type": "e_in",
+                "direction": "in"
             },
             "1": {
-                "in": [
-                    "3:-1"
+                "in": [],
+                "out": [
+                    [
+                        "3",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "type": "e_in",
+                "direction": "out"
             }
         },
+        "signals": {},
         "params": {
             "kappa": {
                 "description": "Reaction Rate",
-                "value": "0.262",
                 "units": "fmol_per_s",
+                "value": "0.262",
                 "symbol": "kappa_r2"
             },
             "R": {
@@ -532,55 +724,91 @@
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_f_r2",
-                "IOType": "in"
+                "symbol": "Af_r2",
+                "expression": "mu_2"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v_r2",
-                "IOType": "out"
+                "symbol": "v_r2"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_r_r2",
-                "IOType": "in"
+                "symbol": "Ar_r2",
+                "expression": "mu_3"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v_r2"
             }
         },
         "constitutive_relations": [
-            "v_r2 = kappa_r2*(exp(A_f_r2/(R*T)) - exp(A_r_r2/(R*T)))"
+            "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ],
-        "type": "Re",
-        "conservation_relations": [
-            "A_f_r2 = mu_2",
-            "A_r_r2 = mu_3"
+        "constitutive_eqs": [
+            [
+                "v_r2",
+                "kappa_r2*(exp(mu_2/(R*T)) - exp(mu_3/(R*T)))",
+                ""
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "Af_r2",
+                "mu_2",
+                ""
+            ],
+            [
+                "Ar_r2",
+                "mu_3",
+                ""
+            ]
         ]
     },
     "r3": {
         "description": "Biochemical Reaction",
-        "class": "SymmetricComponent",
+        "domain": "biochemical",
+        "id": "Re",
         "metamodel": "R",
         "ports": {
             "0": {
                 "in": [
-                    "Ao:1",
-                    "1:1"
+                    [
+                        "Ao",
+                        "0",
+                        "1"
+                    ],
+                    [
+                        "1",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [],
+                "type": "e_in",
+                "direction": "in"
             },
             "1": {
-                "in": [
-                    "2:-1"
+                "in": [],
+                "out": [
+                    [
+                        "2",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "type": "e_in",
+                "direction": "out"
             }
         },
+        "signals": {},
         "params": {
             "kappa": {
                 "description": "Reaction Rate",
-                "value": "1.007e+05",
                 "units": "fmol_per_s",
+                "value": "1.007e+05",
                 "symbol": "kappa_r3"
             },
             "R": {
@@ -600,55 +828,91 @@
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_f_r3",
-                "IOType": "in"
+                "symbol": "Af_r3",
+                "expression": "mu_1 + mu_Ao"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v_r3",
-                "IOType": "out"
+                "symbol": "v_r3"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_r_r3",
-                "IOType": "in"
+                "symbol": "Ar_r3",
+                "expression": "mu_2"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v_r3"
             }
         },
         "constitutive_relations": [
-            "v_r3 = kappa_r3*(exp(A_f_r3/(R*T)) - exp(A_r_r3/(R*T)))"
+            "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ],
-        "type": "Re",
-        "conservation_relations": [
-            "A_f_r3 = mu_Ao +mu_1",
-            "A_r_r3 = mu_2"
+        "constitutive_eqs": [
+            [
+                "v_r3",
+                "kappa_r3*(-exp(mu_2/(R*T)) + exp((mu_1 + mu_Ao)/(R*T)))",
+                ""
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "Af_r3",
+                "mu_1 + mu_Ao",
+                ""
+            ],
+            [
+                "Ar_r3",
+                "mu_2",
+                ""
+            ]
         ]
     },
     "r4": {
         "description": "Biochemical Reaction",
-        "class": "SymmetricComponent",
+        "domain": "biochemical",
+        "id": "Re",
         "metamodel": "R",
         "ports": {
             "0": {
                 "in": [
-                    "3:1"
+                    [
+                        "3",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "out": [],
+                "type": "e_in",
+                "direction": "in"
             },
             "1": {
-                "in": [
-                    "Ai:-1",
-                    "4:-1"
+                "in": [],
+                "out": [
+                    [
+                        "Ai",
+                        "0",
+                        "1"
+                    ],
+                    [
+                        "4",
+                        "0",
+                        "1"
+                    ]
                 ],
-                "out": []
+                "type": "e_in",
+                "direction": "out"
             }
         },
+        "signals": {},
         "params": {
             "kappa": {
                 "description": "Reaction Rate",
-                "value": "1.007e+04",
                 "units": "fmol_per_s",
+                "value": "1.007e+04",
                 "symbol": "kappa_r4"
             },
             "R": {
@@ -668,29 +932,47 @@
             "e_0": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_f_r4",
-                "IOType": "in"
+                "symbol": "Af_r4",
+                "expression": "mu_3"
             },
             "f_0": {
                 "description": "Generalised Flow",
                 "units": "fmol_per_s",
-                "symbol": "v_r4",
-                "IOType": "out"
+                "symbol": "v_r4"
             },
             "e_1": {
                 "description": "Generalised Potential",
                 "units": "J_per_mol",
-                "symbol": "A_r_r4",
-                "IOType": "in"
+                "symbol": "Ar_r4",
+                "expression": "mu_4 + mu_Ai"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v_r4"
             }
         },
         "constitutive_relations": [
-            "v_r4 = kappa_r4*(exp(A_f_r4/(R*T)) - exp(A_r_r4/(R*T)))"
+            "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ],
-        "type": "Re",
-        "conservation_relations": [
-            "A_f_r4 = mu_3",
-            "A_r_r4 = mu_Ai +mu_4"
+        "constitutive_eqs": [
+            [
+                "v_r4",
+                "kappa_r4*(exp(mu_3/(R*T)) - exp((mu_4 + mu_Ai)/(R*T)))",
+                ""
+            ]
+        ],
+        "conservation_eqs": [
+            [
+                "Af_r4",
+                "mu_3",
+                ""
+            ],
+            [
+                "Ar_r4",
+                "mu_4 + mu_Ai",
+                ""
+            ]
         ]
     }
 }
