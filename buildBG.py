@@ -156,16 +156,16 @@ def build_BG_Dict(matrix,bg_components,bg_dict, direction):
                         bg_dict[fIndex][connectionF][portF]['in']+=[[eIndex, portE, str(N[i,j])]]
                         bg_dict[eIndex][connectionE][portE]['out']+=[[fIndex, portF, str(N[i,j])]]
                     else:
-                        bg_dict[fIndex][connectionF][portF]['out']+=[[eIndex, portE, str(N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['in']+=[[fIndex, portF, str(N[i,j])]]
+                        bg_dict[fIndex][connectionF][portF]['out']+=[[eIndex, portE, str(-N[i,j])]]
+                        bg_dict[eIndex][connectionE][portE]['in']+=[[fIndex, portF, str(-N[i,j])]]
                        
                 elif direction == 'f2e':                                                                   
                     if N[i,j]>0:
                         bg_dict[fIndex][connectionF][portF]['out']+=[[eIndex, portE, str(N[i,j])]]
                         bg_dict[eIndex][connectionE][portE]['in']+=[[fIndex, portF, str(N[i,j])]]
                     else:
-                        bg_dict[fIndex][connectionF][portF]['in']+=[[eIndex, portE, str(N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['out']+=[[fIndex, portF, str(N[i,j])]]
+                        bg_dict[fIndex][connectionF][portF]['in']+=[[eIndex, portE, str(-N[i,j])]]
+                        bg_dict[eIndex][connectionE][portE]['out']+=[[fIndex, portF, str(-N[i,j])]]
                 else:
                     raise ValueError('The direction is not correct') 
 
@@ -577,28 +577,44 @@ def build_AdjacencyMatrix_(bg_dict):
                 indexi=comp_port.index(key+','+port) # index of the port in the list B
                 for i in range(len(comp['ports'][port]['in'])): # inwards: indexj to indexi
                     cIndex=comp['ports'][port]['in'][i][0]
-                    portN=comp['ports'][port]['in'][i][1]                    
+                    portN=comp['ports'][port]['in'][i][1]
+                    stoich=comp['ports'][port]['in'][i][2]
+                    try:
+                        num_stochoimetry=int(stoich)
+                    except:
+                        try:
+                            num_stochoimetry=float(stoich)
+                        except:
+                            raise ValueError('The stochoimetry is not an integer or a float')                    
                     indexj=comp_port.index(cIndex+','+portN)
                     A[indexj][indexi]=1
                     if comp['ports'][port]['type']=='e_in':
-                        e_bond_str=bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol']
-                        f_bond_str=f_str
+                        e_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol'])
+                        f_bond_str=sympify(f_str)
                     elif comp['ports'][port]['type']=='e_out':
-                        e_bond_str=e_str
-                        f_bond_str=bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol']
-                    P_bond_expr[indexj][indexi]=sympify(e_bond_str)*sympify(f_bond_str)
+                        e_bond_str=sympify(e_str)
+                        f_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
+                    P_bond_expr[indexj][indexi]=e_bond_str*f_bond_str
                 for i in range(len(comp['ports'][port]['out'])): # outwards: indexi to indexj
                     cIndex=comp['ports'][port]['out'][i][0]
                     portN=comp['ports'][port]['out'][i][1]
+                    stoich=comp['ports'][port]['out'][i][2]
+                    try:
+                        num_stochoimetry=int(stoich)
+                    except:
+                        try:
+                            num_stochoimetry=float(stoich)
+                        except:
+                            raise ValueError('The stochoimetry is not an integer or a float')
                     indexj=comp_port.index(cIndex+','+portN)
                     A[indexi][indexj]=1
                     if comp['ports'][port]['type']=='e_in':
-                        e_bond_str=bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol']
-                        f_bond_str=f_str
+                        e_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol'])
+                        f_bond_str=sympify(f_str)
                     elif comp['ports'][port]['type']=='e_out':
-                        e_bond_str=e_str
-                        f_bond_str=bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol']
-                    P_bond_expr[indexi][indexj]=sympify(e_bond_str)*sympify(f_bond_str)
+                        e_bond_str=sympify(e_str)
+                        f_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
+                    P_bond_expr[indexi][indexj]=e_bond_str*f_bond_str
             P_comp_expr[key]=P_sum      
     return A, comp_port, P_bond_expr, P_comp_expr, e_comp_port_expr, f_comp_port_expr 
 
@@ -675,8 +691,8 @@ def calc_energy(bg_json,result_csv):
         list_vars_str=[str(var) for var in list_vars]
         f_symp_func=lambdify(list_vars,f_comp_port_expr[i],'numpy')
         df_f_comp_port[i]=f_symp_func(*[simResults_df[var] for var in list_vars_str])
-        e_comp_port_expr_+=[str(e_comp_port_expr[i])]
-        f_comp_port_expr_+=[str(f_comp_port_expr[i])]
+        e_comp_port_expr_+=[comp_port[i]+': '+str(e_comp_port_expr[i])]
+        f_comp_port_expr_+=[comp_port[i]+': '+str(f_comp_port_expr[i])]
 
         # calculate the energy and activity of each bond
         for j in range(len(comp_port)):
@@ -690,7 +706,7 @@ def calc_energy(bg_json,result_csv):
                 A_bond+=[np.trapz(np.abs(P_bond_vec),simResults_df['t'])]
                 df_power_bond[f'{i}_{j}']=P_bond_vec 
                 bond_ij+=[(i,j)] 
-                P_bond_expr_+=[str(P_bond_expr[i][j])]
+                P_bond_expr_+=[comp_port[i]+'-->'+comp_port[j]+':   '+str(P_bond_expr[i][j])]
 
     # calculate the energy and activity of each component              
     A_total=0
@@ -704,12 +720,12 @@ def calc_energy(bg_json,result_csv):
         A_comp_val[i]=np.trapz(np.abs(P_comp_vec),simResults_df['t'])
         A_total+=A_comp_val[i]
         df_power_comp[key]=P_comp_vec
-        P_comp_expr_+=[str(P_comp_expr[key])]
+        P_comp_expr_+=[key+':   '+str(P_comp_expr[key])]
         i+=1
            
-    AI_comp_val=A_comp_val/A_total
+    AI_comp_val=A_comp_val/A_total*100
     
-    dict_activity={'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
+    dict_activity={'componentl list':list(bg_dict.keys()),'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
                    'Bond Energy': E_bond, 'Bond Activity': A_bond, 'Bond_ij': bond_ij, 'Comp_port': comp_port,
                    'P_bond_expr': P_bond_expr_, 'P_comp_expr': P_comp_expr_, 'e_comp_port': e_comp_port_expr_, 'f_comp_port': f_comp_port_expr_}
     
@@ -727,8 +743,8 @@ if __name__ == "__main__":
     
     # specify the csv files for the stoichiometric matrix
     file_path='./data/'
-    fmatrix=file_path+'SLC2_f_1.csv'
-    rmatrix=file_path+'SLC2_r_1.csv'
+    fmatrix=file_path+'SLC5_f.csv'
+    rmatrix=file_path+'SLC5_r.csv'
    
     # load the predefined bond graph components
     bg_components_json='BG_components.json'
@@ -744,32 +760,52 @@ if __name__ == "__main__":
     # update the equations of the bond graph model
     voi={'description': 'Time', 'units': 'second', 'symbol': 't'}
     update_BG_eqn(bg_dict,voi)
-     
+    
+    fmatrix=file_path+'SLC5_f_chem.csv'
+    rmatrix=file_path+'SLC5_r_chem.csv' 
     # update the BG parameters for the biochemical reactions
     eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
     eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
-    V=1
-    V_o=90
-    h=0.726;g=12.1;c=1113;d=90.3;a=500000*V_o;b=a*9.5;f=3000*V_o;e=12.8459*f
-    kf=np.array([[h, c, a, e]]).transpose()
-    kr=np.array([[g, d, b, f]]).transpose()
-    K_c=np.array([[1]]).transpose()
-    N_c=np.array([[1,-1,0,0,0,0]]).transpose()
+    AVO=6.022e23
+    V1=1e-3
+    k_12=8e4*V1*V1
+    k_23=1e5*V1
+    k_34=50
+    k_45=800
+    k_56=10
+    k_61=5
+    k_25=0.3
+    k_21=500
+    k_32=20
+    k_43=50
+    k_65=50*V1*V1
+    k_16=35
+    k_52=k_12*k_25*k_56*k_61/(k_21*k_65*k_16)
+    k_54=k_23*k_34*k_45*k_52/(k_32*k_43*k_25)
+
+    balance1=k_12*k_23*k_34*k_45*k_56*k_61/(k_21*k_32*k_43*k_54*k_65*k_16)
+    balance2=k_12*k_25*k_56*k_61/(k_21*k_52*k_65*k_16)
+    balance3=k_23*k_34*k_45*k_52/(k_32*k_43*k_54*k_25)
+    print(balance1,balance2,balance3)
+    kf=np.array([[k_12, k_23, k_34, k_45, k_56, k_61, k_25]]).transpose()
+    kr=np.array([[k_21, k_32, k_43, k_54, k_65, k_16, k_52 ]]).transpose()
     K_c=np.array([[]]).transpose()
     N_c=np.array([[]]).transpose()
-    V_i=0.09
-    V_o=0.09
+
     V_E=1
-    Ws=np.array([[V_i,V_o,V_E,V_E,V_E,V_E]]).transpose()
+    V_o=8.5e5
+    V_i=8.5e5
+    Ws=np.array([[V_i,V_o,V_i,V_o,V_E,V_E,V_E,V_E,V_E,V_E]]).transpose()
     kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
     update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv')
 
     # save the bond graph model to a json file
-    json_file=file_path+'SLC2_BG.json'    
+    json_file=file_path+'SLC5_BG.json'    
     save_json(bg_dict, json_file)   
 
     # calculate the energy and activity of the bond graph model
-    calc_energy(json_file,file_path+'dummy_results.csv')
+    file_path=r'C:\Users\wai484\temp\Energy-based-System-Analysis\models\\'
+    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA.csv')
 
 
 
