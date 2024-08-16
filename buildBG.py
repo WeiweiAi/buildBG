@@ -672,6 +672,11 @@ def calc_energy(bg_json,result_csv):
     df_e_comp_port=pd.DataFrame()
     df_f_comp_port=pd.DataFrame()    
     df_power_comp=pd.DataFrame(columns=bg_dict.keys())
+    df_power_bond['t']=simResults_df['t']
+    df_e_comp_port['t']=simResults_df['t']
+    df_f_comp_port['t']=simResults_df['t']
+    df_power_comp['t']=simResults_df['t']
+
 
     bond_ij=[]# save the list of bond (i,j)
     E_bond=[] # save the list of  bond energy
