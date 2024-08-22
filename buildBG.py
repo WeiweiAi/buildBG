@@ -5,6 +5,7 @@ from pathlib import Path
 from utilities import *
 from sympy import *
 import pandas as pd
+from scipy import integrate
 
 defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","farad","gram","gray","henry",
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
@@ -640,11 +641,12 @@ def calc_energy(bg_json,result_csv):
 
     side effect
     ------------
-    Save the power vector of each bond to a csv file 'bond_power.csv'
-    Save the power vector of each component to a csv file 'comp_power.csv'
-    save the adjacency matrix to a csv file 'Adjacency.csv'
-    save the effort of each port to a csv file 'e_comp_port.csv'
-    save the flow of each port to a csv file 'f_comp_port.csv'
+    save the power vector of each bond to a csv file 'bond_power.csv'
+    save the power vector of each component to a csv file 'comp_power.csv'
+    save the activity of each component to a csv file 'comp_activity.csv'    
+    save the effort of each port to a csv file '_comp_port_e.csv'
+    save the flow of each port to a csv file '_comp_port_f.csv'
+    save the adjacency matrix to a csv file 'adjacency.csv'
     Save the energy and activity of each component to a json file 'activity.json'
     """ 
     bg_dict=load_json(bg_json)
@@ -654,9 +656,10 @@ def calc_energy(bg_json,result_csv):
     csv_file_name=Path(result_csv).stem 
     csv_file_power_bond=csv_path/(csv_file_name+'_bond_power.csv')
     csv_file_power_comp=csv_path/(csv_file_name+'_comp_power.csv')
-    csv_file_e_comp_port=csv_path/(csv_file_name+'_e_comp_port.csv')
-    csv_file_f_comp_port=csv_path/(csv_file_name+'_f_comp_port.csv') 
-    csv_file_A=csv_path/(csv_file_name+'_Adjacency.csv')  
+    csv_file_activity_comp=csv_path/(csv_file_name+'_comp_activity.csv')
+    csv_file_e_comp_port=csv_path/(csv_file_name+'_comp_port_e.csv')
+    csv_file_f_comp_port=csv_path/(csv_file_name+'_comp_port_f.csv')     
+    csv_file_A=csv_path/(csv_file_name+'_adjacency.csv')  
     json_file=csv_path/(csv_file_name+'_activity.json')
 
     A, comp_port, P_bond_expr, P_comp_expr, e_comp_port_expr, f_comp_port_expr = build_AdjacencyMatrix_(bg_dict)
@@ -672,10 +675,12 @@ def calc_energy(bg_json,result_csv):
     df_e_comp_port=pd.DataFrame()
     df_f_comp_port=pd.DataFrame()    
     df_power_comp=pd.DataFrame(columns=bg_dict.keys())
+    df_activity_comp=pd.DataFrame(columns=bg_dict.keys())
     df_power_bond['t']=simResults_df['t']
     df_e_comp_port['t']=simResults_df['t']
     df_f_comp_port['t']=simResults_df['t']
     df_power_comp['t']=simResults_df['t']
+    df_activity_comp['t']=simResults_df['t']
 
 
     bond_ij=[]# save the list of bond (i,j)
@@ -698,7 +703,6 @@ def calc_energy(bg_json,result_csv):
         df_f_comp_port[i]=f_symp_func(*[simResults_df[var] for var in list_vars_str])
         e_comp_port_expr_+=[comp_port[i]+': '+str(e_comp_port_expr[i])]
         f_comp_port_expr_+=[comp_port[i]+': '+str(f_comp_port_expr[i])]
-
         # calculate the energy and activity of each bond
         for j in range(len(comp_port)):
             if A[i][j]==1:
@@ -725,12 +729,13 @@ def calc_energy(bg_json,result_csv):
         A_comp_val[i]=np.trapz(np.abs(P_comp_vec),simResults_df['t'])
         A_total+=A_comp_val[i]
         df_power_comp[key]=P_comp_vec
+        df_activity_comp[key]=integrate.cumulative_simpson(np.abs(P_comp_vec),x=simResults_df['t'],initial=0)
         P_comp_expr_+=[key+':   '+str(P_comp_expr[key])]
         i+=1
            
     AI_comp_val=A_comp_val/A_total*100
     
-    dict_activity={'componentl list':list(bg_dict.keys()),'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
+    dict_activity={'Componentl list':list(bg_dict.keys()),'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
                    'Bond Energy': E_bond, 'Bond Activity': A_bond, 'Bond_ij': bond_ij, 'Comp_port': comp_port,
                    'P_bond_expr': P_bond_expr_, 'P_comp_expr': P_comp_expr_, 'e_comp_port': e_comp_port_expr_, 'f_comp_port': f_comp_port_expr_}
     
@@ -738,7 +743,8 @@ def calc_energy(bg_json,result_csv):
     df_power_bond.to_csv(csv_file_power_bond, index=False)
     df_power_comp.to_csv(csv_file_power_comp, index=False)
     df_e_comp_port.to_csv(csv_file_e_comp_port, index=False)
-    df_f_comp_port.to_csv(csv_file_f_comp_port, index=False)    
+    df_f_comp_port.to_csv(csv_file_f_comp_port, index=False)
+    df_activity_comp.to_csv(csv_file_activity_comp, index=False)    
     save_json(dict_activity, json_file)   
 
     return 
@@ -810,7 +816,11 @@ if __name__ == "__main__":
 
     # calculate the energy and activity of the bond graph model
     file_path=r'C:\Users\wai484\temp\Energy-based-System-Analysis\models\\'
+    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_1.csv')
+    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_2.csv')
+    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_3.csv')
     calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA.csv')
+
 
 
 
