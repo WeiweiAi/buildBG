@@ -75,7 +75,7 @@ def load_matrix(matrix):
     
     return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
-def build_BG_Dict(matrix,bg_components,bg_dict, direction):
+def build_BG_Dict(matrix,bg_components_json,bg_dict, direction):
     """
     Build the dictionary for the components and connections from the stoichiometric matrix
     Parameters
@@ -88,8 +88,8 @@ def build_BG_Dict(matrix,bg_components,bg_dict, direction):
          *       *     *      fPort fPort
         eName   eID   ePort      0    1 
         eName   eID   ePort      1    0
-    bg_components : dict
-        The dictionary of the bond graph components (predefined)
+    bg_components_json : str
+        The file path of the json file of the BG components
     bg_dict : dict
         The dictionary of the bond graph model
         Can be empty or have some components already
@@ -106,6 +106,7 @@ def build_BG_Dict(matrix,bg_components,bg_dict, direction):
     Update the bg_dict dictionary with the components and connections from the stoichiometric matrix
     """
     eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
+    bg_components=load_json(bg_components_json)
     cNames=eName+fName
     cIDs=eID+fID
     # update the symbols of the parameters, variables and state variables for the components  
@@ -756,17 +757,14 @@ if __name__ == "__main__":
     file_path='./data/'
     fmatrix=file_path+'SLC5_f.csv'
     rmatrix=file_path+'SLC5_r.csv'
-   
-    # load the predefined bond graph components
-    bg_components_json='BG_components.json'
-    bg_components=load_json(bg_components_json)    
+    bg_components_json='BG_components.json'        
     
     # build the bond graph model
     bg_dict={}       
     direction = 'e2f'
-    build_BG_Dict(fmatrix,bg_components,bg_dict,direction)
+    build_BG_Dict(fmatrix,bg_components_json,bg_dict,direction)
     direction = 'f2e'
-    build_BG_Dict(rmatrix,bg_components,bg_dict,direction)
+    build_BG_Dict(rmatrix,bg_components_json,bg_dict,direction)
     
     # update the equations of the bond graph model
     voi={'description': 'Time', 'units': 'second', 'symbol': 't'}
@@ -816,9 +814,6 @@ if __name__ == "__main__":
 
     # calculate the energy and activity of the bond graph model
     file_path=r'C:\Users\wai484\temp\Energy-based-System-Analysis\models\\'
-    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_1.csv')
-    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_2.csv')
-    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA_3.csv')
     calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA.csv')
 
 
