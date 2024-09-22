@@ -3,6 +3,14 @@
 # Add units to the parameters, variables; Add power and activity variables; Add signals; 
 # Define individual components
 # Note: Natural logarithm ln=log is used in the constitutive relations
+
+# the key of the vars: name_portid, for example, e_0, f_0, s_2, s_3, etc.
+# type of ports: defines the type of bond the port, for example, Power, Signal.
+# direction: indicating the reference direction of the energy flow, 
+# in = energy flows towards the port, out = energy flows away from the port
+# '' = direction not defined for signal ports
+# causality: indicating the causality of the bond that the port is connected to,
+# 'e_in' = effort in, 'e_out' = effort out, '' = causality not defined, 's_in' = signal in, 's_out' = signal out
 import json
 R = {
         "description": "Generalised Linear Resistor",
@@ -10,9 +18,13 @@ R = {
         "id": "R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'},
-        },
-        "signals": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params": {
             "r": {
@@ -20,10 +32,6 @@ R = {
                 "value": 1,
                 "units": "pOhm",
                 "symbol": "R",
-                "range": [
-                    0,
-                    "inf"
-                ]
             }
         },
         "vars":{
@@ -39,8 +47,7 @@ R = {
             },
         },
         "constitutive_relations": [
-            "e_0 - f_0*r",
-
+            "e_0 - f_0*r"
         ]
     }
 
@@ -50,9 +57,13 @@ C = {
         "id": "C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params": {
             "C": {
@@ -60,10 +71,6 @@ C = {
                 "value": 1,
                 "units": "fF",
                 "symbol": "C",
-                "range": [
-                    0,
-                    "inf"
-                ]
             },
             "q_init": {
                 "description": "Initial Generalised Position",
@@ -83,14 +90,11 @@ C = {
                 "units": "fA",
                 "symbol": "I",
             },
-        },
-        
-        "state_vars": {
             "q_0": {
                 "description": "Generalised position",
                 "units": "fC",
                 "symbol": "q",
-                "value": "q_init"
+                "initial value": "q_init"
             },
         },
         "constitutive_relations": [
@@ -105,9 +109,13 @@ I = {
         "id": "I",
         "metamodel": "I",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "vars":{
             "e_0": {
@@ -120,13 +128,11 @@ I = {
                 "units": "fA",
                 "symbol": "I",
             },
-        },
-        "state_vars": {
             "p_0": {
                 "description": "Generalised momentum",
                 "units": "volt_s",
                 "symbol": "p",
-                "value": "p_init"
+                "initial value": "p_init"
             }
         },
         "params": {
@@ -135,10 +141,6 @@ I = {
                 "value": 1,
                 "units": "pH",
                 "symbol": "L",
-                "range": [
-                    0,
-                    "inf"
-                ]
             },
             "p_init": {
                 "description": "Initial generalised momentum",
@@ -158,10 +160,14 @@ Se = {
         "domain": "Electrical",
         "id": "Se",
         "metamodel": "SS",
-        "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
-        },
-        "signals": {
+         "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params": {
             "e": {
@@ -196,9 +202,13 @@ Sf = {
         "id": "Sf",
         "metamodel": "SS",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
-        },
-        "signals": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params": {
             "f": {
@@ -233,15 +243,19 @@ TF = {
         "metamodel": "TF",
         "ports": {
             "0": {
-                "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
-            },
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
             "1": {
-                "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
-            }
-        },
-        "signals": {
+                "description": "Power port 1",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "vars":{
             "e_0": {
@@ -287,35 +301,49 @@ GY = {
         "metamodel": "GY",
         "ports": {
             "0": {
-                "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
-            },
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
             "1": {
-                "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
-            }
-        },
-        "signals": {
+                "description": "Power port 1",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "vars":{
             "e_0": {
                 "description": "Generalised Potential",
+                "units": "",
+                "symbol": "",
             },
             "f_0": {
                 "description": "Generalised Flow",
+                "units": "",
+                "symbol": "",
             },
             "e_1": {
                 "description": "Generalised Potential",
+                "units": "",
+                "symbol": "",
             },
             "f_1": {
                 "description": "Generalised Flow",
+                "units": "",
+                "symbol": "",
             },
 
         },
         "params": {
             "r": {
                 "description": "Ratio",
-                "value": 1
+                "value": 1,
+                "symbol": "n",
+                "units": "",
             }
         },
         "constitutive_relations": [
@@ -329,13 +357,14 @@ Ce = {
         "domain": "biochemical",
         "id":"Ce",
         "metamodel":"C",
-        "ports":{
-          "0":{
-              'in':[],'out':[],
-              'type': ' ','direction': 'in'
-          },
-        },
-        "signals": {
+        "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params":{
           "K":{
@@ -363,14 +392,6 @@ Ce = {
               "value": 1,
           }
         },    
-        "state_vars":{ 
-          "q_0":{
-              "description":"Molar Quantity",
-              "units": "fmol",
-              "symbol": "q",
-              "value": "q_init",
-          },
-        },
         "vars":{
           "e_0": {
               "description": "Generalised Potential",
@@ -381,7 +402,13 @@ Ce = {
               "description": "Generalised Flow ",
               "units": "fmol_per_s",
               "symbol": "v",
-          }      
+          },
+          "q_0":{
+              "description":"Molar Quantity",
+              "units": "fmol",
+              "symbol": "q",
+              "initial value": "q_init",
+          },      
         },
         "constitutive_relations":[
           "e_0 - R*T*log(K*q_0)",
@@ -395,11 +422,21 @@ Re ={
         "domain": "biochemical",
         "id": "Re",
         "metamodel":"R",
-        "ports":{
-          "0":{'in':[],'out':[],'type': ' ','direction': 'in'},
-          "1":{'in':[],'out':[],'type': ' ','direction': 'out'}
-        },
-        "signals": {
+        "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
+            "1": {
+                "description": "Power port 1",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "params":{
           "kappa":{
@@ -455,15 +492,19 @@ zF = {
         "metamodel": "TF",
         "ports": {
             "0": {
-                "description": "Primary",
-                'in':[],'out':[],'type': ' ','direction': 'in'
-            },
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
             "1": {
-                "description": "Secondary",
-                'in':[],'out':[],'type': ' ','direction': 'out'
-            }
-        },
-        "signals": {
+                "description": "Power port 1",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
         },
         "vars":{
             "e_0": {
@@ -507,20 +548,100 @@ zF = {
         ]
     }
 
+Re_GHK ={
+        "description": "Voltage modulated Biochemical Reaction-Goldman-Hodgkin-Katz (GHK) ion channel",
+        "domain": "biochemical",
+        "id": "Re_GHK",
+        "metamodel":"R",
+        "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'in',
+                'causality': '',
+                'in':[],'out':[]
+                },
+            "1": {
+                "description": "Power port 1",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
+            "m": {
+                "description": "modulation port",
+                "type": "Signal",
+                'direction': '',
+                'causality': 's_in',
+                'in':[],'out':[]
+                },
+        },
+        "params":{
+          "kappa":{
+              "description":"Reaction Rate",
+              "units": "fmol_per_s",
+              "value": 1,
+              "symbol": "kappa"
+          },
+          "R":{
+              "description":"Universal Gas Constant",
+              "value": 8.31,
+              "units": "J_per_K_mol",
+              "symbol": "R"
+          },
+          "T":{
+              "description": "Temperature",
+              "value": 293,
+              "units": "kelvin",
+              "symbol": "T"
+          }
+        },
+        "vars":{
+              "e_0": {
+                  "description": "Generalised Potential",
+                  "units": "J_per_mol",
+                  "symbol": "Af",
+              },
+              "f_0": {
+                  "description": "Generalised Flow",
+                  "units": "fmol_per_s",
+                  "symbol": "v",
+              },
+              "e_1": {
+                  "description": "Generalised Potential",
+                  "units": "J_per_mol",
+                  "symbol": "Ar",
+              },
+              "f_1": {
+                  "description": "Generalised Flow",
+                  "units": "fmol_per_s",
+                  "symbol": "v",
+              },
+              "s_m": {
+                  "description": "Generalised Potential",
+                  "units": "J_per_mol",
+                  "symbol": "Am",
+              },
+        },
+        "constitutive_relations":[
+          "f_0- Piecewise(( kappa*(exp(e_0/R/T) - exp(e_1/R/T)),s_m==0),(kappa*(s_m/R/T/(exp(s_m/R/T)))*((exp(e_0/R/T) - exp(e_1/R/T))),s_m!=0))"
+        ]
+    }
 
 ch_Se = {
           "description":"Concentration of Chemical Species",
           "domain": "biochemical",
           "id":"ch_Se",
           "metamodel":"SS",
-          "ports":{
-            "0":{
-                'in':[],'out':[],
-                'type': ' ','direction': 'out'
-            },
-          },
-          "signals": {
-        },
+          "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                'direction': 'out',
+                'causality': '',
+                'in':[],'out':[]
+                },
+         },
           "params":{
             "K":{
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
@@ -570,10 +691,14 @@ m_Se = {
             "id": "m_Se",
             "metamodel": "SS",
             "ports": {
-                "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
-            },
-            "signals": {
-            },
+                "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'out',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
+           },
             "params": {
                 "e": {
                     "description": "Generalised Potential",
@@ -604,10 +729,14 @@ m_Sf = {
             "id": "m_Sf",
             "metamodel": "SS",
             "ports": {
-                "0": {'in':[],'out':[],'type': ' ','direction': 'out'}
-            },
-            "signals": {
-            },
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'out',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
+           },
             "params": {
                 "f": {
                     "description": "Generalised Flow",
@@ -639,9 +768,13 @@ m_R = {
         "id": "m_R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'in',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
         },
         "params": {
             "r": {
@@ -678,9 +811,13 @@ m_C = {
         "id": "m_C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'in',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
         },
         "params": {
             "C": {
@@ -711,13 +848,11 @@ m_C = {
                 "units": "um_per_s",
                 "symbol": "dx",
             },
-        },
-        "state_vars": {
             "q_0": {
                 "description": "Generalised position",
                 "units": "um",
                 "symbol": "x",
-                "value": "x_init",
+                "initial value": "x_init",
             },
         },
         "constitutive_relations": [
@@ -733,9 +868,13 @@ cv_R = {
         "id": "cv_R",
         "metamodel": "R",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'in',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
         },
         "params": {
             "r": {
@@ -743,10 +882,6 @@ cv_R = {
                 "value": 1,
                 "units": "mmHg_s_per_mL",
                 "symbol": "R",
-                "range": [
-                    0,
-                    "inf"
-                ]
             }
         },
         "vars":{
@@ -772,9 +907,13 @@ cv_C = {
         "id": "cv_C",
         "metamodel": "C",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'in',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
         },
         "params": {
             "C": {
@@ -805,13 +944,11 @@ cv_C = {
                 "units": "mL_per_s",
                 "symbol": "v",
             },
-        },
-        "state_vars": {
             "q_0": {
                 "description": "Generalised position",
                 "units": "mL",
                 "symbol": "q",
-                "value": "q_init",
+                "initial value": "q_init",
             },
         },
         "constitutive_relations": [
@@ -826,9 +963,13 @@ cv_I = {
         "id": "cv_I",
         "metamodel": "I",
         "ports": {
-            "0": {'in':[],'out':[],'type': ' ','direction': 'in'}
-        },
-        "signals": {
+             "0": {
+                   "description": "Power port 0",
+                   "type": "Power",
+                   'direction': 'in',
+                   'causality': '',
+                   'in':[],'out':[]
+                   },
         },
         "vars":{
             "e_0": {
@@ -841,31 +982,12 @@ cv_I = {
                 "units": "mL_per_s",
                 "symbol": "v",
             },
-            "P_0": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P",
-            }
-        },
-        "state_vars": {
             "p_0": {
                 "description": "Generalised momentum",
                 "units": "mmHg_mL2_per_s3",
                 "symbol": "p",
-                "value": "p_init"
+                "initial value": "p_init"
             },
-             "A": {
-                "description": "Generalised activity",
-                "units": "mmHg_mL",
-                "symbol": "A",
-                "value": 0,
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "mmHg_mL",
-                "symbol": "E",
-                "value": 0,
-            }
         },
         "params": {
             "L": {
@@ -873,10 +995,6 @@ cv_I = {
                 "value": 1,
                 "units": "mmHg_s2_per_ml",
                 "symbol": "L",
-                "range": [
-                    0,
-                    "inf"
-                ]
             },
             "p_init": {
                 "description": "Initial generalised momentum",
@@ -902,6 +1020,7 @@ def BG_components():
         "GY": GY,
         "Ce": Ce,
         "Re": Re,
+        "Re_GHK": Re_GHK,
         "zF": zF,
         "ch_Se": ch_Se,
         "m_Se": m_Se,

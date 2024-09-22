@@ -6,23 +6,20 @@
         "metamodel": "R",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
                 "value": 1,
                 "units": "pOhm",
-                "symbol": "R",
-                "range": [
-                    0,
-                    "inf"
-                ]
+                "symbol": "R"
             }
         },
         "vars": {
@@ -48,23 +45,20 @@
         "metamodel": "C",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
                 "value": 1,
                 "units": "fF",
-                "symbol": "C",
-                "range": [
-                    0,
-                    "inf"
-                ]
+                "symbol": "C"
             },
             "q_init": {
                 "description": "Initial Generalised Position",
@@ -83,14 +77,12 @@
                 "description": "Generalised Flow",
                 "units": "fA",
                 "symbol": "I"
-            }
-        },
-        "state_vars": {
+            },
             "q_0": {
                 "description": "Generalised position",
                 "units": "fC",
                 "symbol": "q",
-                "value": "q_init"
+                "initial value": "q_init"
             }
         },
         "constitutive_relations": [
@@ -105,13 +97,14 @@
         "metamodel": "I",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
@@ -122,14 +115,12 @@
                 "description": "Generalised Flow",
                 "units": "fA",
                 "symbol": "I"
-            }
-        },
-        "state_vars": {
+            },
             "p_0": {
                 "description": "Generalised momentum",
                 "units": "volt_s",
                 "symbol": "p",
-                "value": "p_init"
+                "initial value": "p_init"
             }
         },
         "params": {
@@ -137,11 +128,7 @@
                 "description": "Inductance",
                 "value": 1,
                 "units": "pH",
-                "symbol": "L",
-                "range": [
-                    0,
-                    "inf"
-                ]
+                "symbol": "L"
             },
             "p_init": {
                 "description": "Initial generalised momentum",
@@ -162,13 +149,14 @@
         "metamodel": "SS",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "e": {
                 "description": "Generalised Potential",
@@ -200,13 +188,14 @@
         "metamodel": "SS",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "f": {
                 "description": "Generalised Flow",
@@ -238,21 +227,22 @@
         "metamodel": "TF",
         "ports": {
             "0": {
-                "description": "Primary",
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             },
             "1": {
-                "description": "Secondary",
+                "description": "Power port 1",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
@@ -295,39 +285,50 @@
         "metamodel": "GY",
         "ports": {
             "0": {
-                "description": "Primary",
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             },
             "1": {
-                "description": "Secondary",
+                "description": "Power port 1",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "vars": {
             "e_0": {
-                "description": "Generalised Potential"
+                "description": "Generalised Potential",
+                "units": "",
+                "symbol": ""
             },
             "f_0": {
-                "description": "Generalised Flow"
+                "description": "Generalised Flow",
+                "units": "",
+                "symbol": ""
             },
             "e_1": {
-                "description": "Generalised Potential"
+                "description": "Generalised Potential",
+                "units": "",
+                "symbol": ""
             },
             "f_1": {
-                "description": "Generalised Flow"
+                "description": "Generalised Flow",
+                "units": "",
+                "symbol": ""
             }
         },
         "params": {
             "r": {
                 "description": "Ratio",
-                "value": 1
+                "value": 1,
+                "symbol": "n",
+                "units": ""
             }
         },
         "constitutive_relations": [
@@ -342,13 +343,14 @@
         "metamodel": "C",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
@@ -375,14 +377,6 @@
                 "value": 1
             }
         },
-        "state_vars": {
-            "q_0": {
-                "description": "Molar Quantity",
-                "units": "fmol",
-                "symbol": "q",
-                "value": "q_init"
-            }
-        },
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
@@ -393,6 +387,12 @@
                 "description": "Generalised Flow ",
                 "units": "fmol_per_s",
                 "symbol": "v"
+            },
+            "q_0": {
+                "description": "Molar Quantity",
+                "units": "fmol",
+                "symbol": "q",
+                "initial value": "q_init"
             }
         },
         "constitutive_relations": [
@@ -407,19 +407,22 @@
         "metamodel": "R",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             },
             "1": {
+                "description": "Power port 1",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "kappa": {
                 "description": "Reaction Rate",
@@ -466,6 +469,88 @@
             "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))"
         ]
     },
+    "Re_GHK": {
+        "description": "Voltage modulated Biochemical Reaction-Goldman-Hodgkin-Katz (GHK) ion channel",
+        "domain": "biochemical",
+        "id": "Re_GHK",
+        "metamodel": "R",
+        "ports": {
+            "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
+                "in": [],
+                "out": []
+            },
+            "1": {
+                "description": "Power port 1",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
+                "in": [],
+                "out": []
+            },
+            "m": {
+                "description": "modulation port",
+                "type": "Signal",
+                "direction": "",
+                "causality": "s_in",
+                "in": [],
+                "out": []
+            }
+        },
+        "params": {
+            "kappa": {
+                "description": "Reaction Rate",
+                "units": "fmol_per_s",
+                "value": 1,
+                "symbol": "kappa"
+            },
+            "R": {
+                "description": "Universal Gas Constant",
+                "value": 8.31,
+                "units": "J_per_K_mol",
+                "symbol": "R"
+            },
+            "T": {
+                "description": "Temperature",
+                "value": 293,
+                "units": "kelvin",
+                "symbol": "T"
+            }
+        },
+        "vars": {
+            "e_0": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "Af"
+            },
+            "f_0": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v"
+            },
+            "e_1": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "Ar"
+            },
+            "f_1": {
+                "description": "Generalised Flow",
+                "units": "fmol_per_s",
+                "symbol": "v"
+            },
+            "s_m": {
+                "description": "Generalised Potential",
+                "units": "J_per_mol",
+                "symbol": "Am"
+            }
+        },
+        "constitutive_relations": [
+            "f_0- Piecewise(( kappa*(exp(e_0/R/T) - exp(e_1/R/T)),s_m==0),(kappa*(s_m/R/T/(exp(s_m/R/T)))*((exp(e_0/R/T) - exp(e_1/R/T))),s_m!=0))"
+        ]
+    },
     "zF": {
         "description": "Biochemical Transformer",
         "domain": "biochemical",
@@ -473,21 +558,22 @@
         "metamodel": "TF",
         "ports": {
             "0": {
-                "description": "Primary",
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             },
             "1": {
-                "description": "Secondary",
+                "description": "Power port 1",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
@@ -536,13 +622,14 @@
         "metamodel": "SS",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "K": {
                 "description": "Biochemical Constant; exp(mu_0/RT)/V",
@@ -592,13 +679,14 @@
         "metamodel": "SS",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "e": {
                 "description": "Generalised Potential",
@@ -630,13 +718,14 @@
         "metamodel": "SS",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "out",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "out"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "f": {
                 "description": "Generalised Flow",
@@ -668,13 +757,14 @@
         "metamodel": "R",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
@@ -710,13 +800,14 @@
         "metamodel": "C",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
@@ -745,14 +836,12 @@
                 "description": "Generalised Flow",
                 "units": "um_per_s",
                 "symbol": "dx"
-            }
-        },
-        "state_vars": {
+            },
             "q_0": {
                 "description": "Generalised position",
                 "units": "um",
                 "symbol": "x",
-                "value": "x_init"
+                "initial value": "x_init"
             }
         },
         "constitutive_relations": [
@@ -767,23 +856,20 @@
         "metamodel": "R",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "r": {
                 "description": "Resistance",
                 "value": 1,
                 "units": "mmHg_s_per_mL",
-                "symbol": "R",
-                "range": [
-                    0,
-                    "inf"
-                ]
+                "symbol": "R"
             }
         },
         "vars": {
@@ -809,13 +895,14 @@
         "metamodel": "C",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "params": {
             "C": {
                 "description": "Capacitance",
@@ -844,14 +931,12 @@
                 "description": "Generalised Flow",
                 "units": "mL_per_s",
                 "symbol": "v"
-            }
-        },
-        "state_vars": {
+            },
             "q_0": {
                 "description": "Generalised position",
                 "units": "mL",
                 "symbol": "q",
-                "value": "q_init"
+                "initial value": "q_init"
             }
         },
         "constitutive_relations": [
@@ -866,13 +951,14 @@
         "metamodel": "I",
         "ports": {
             "0": {
+                "description": "Power port 0",
+                "type": "Power",
+                "direction": "in",
+                "causality": "",
                 "in": [],
-                "out": [],
-                "type": " ",
-                "direction": "in"
+                "out": []
             }
         },
-        "signals": {},
         "vars": {
             "e_0": {
                 "description": "Generalised Potential",
@@ -884,30 +970,11 @@
                 "units": "mL_per_s",
                 "symbol": "v"
             },
-            "P_0": {
-                "description": "Generalised power",
-                "units": "mmHg_mL_per_s",
-                "symbol": "P"
-            }
-        },
-        "state_vars": {
             "p_0": {
                 "description": "Generalised momentum",
                 "units": "mmHg_mL2_per_s3",
                 "symbol": "p",
-                "value": "p_init"
-            },
-            "A": {
-                "description": "Generalised activity",
-                "units": "mmHg_mL",
-                "symbol": "A",
-                "value": 0
-            },
-            "E": {
-                "description": "Generalised energy",
-                "units": "mmHg_mL",
-                "symbol": "E",
-                "value": 0
+                "initial value": "p_init"
             }
         },
         "params": {
@@ -915,11 +982,7 @@
                 "description": "Inductance",
                 "value": 1,
                 "units": "mmHg_s2_per_ml",
-                "symbol": "L",
-                "range": [
-                    0,
-                    "inf"
-                ]
+                "symbol": "L"
             },
             "p_init": {
                 "description": "Initial generalised momentum",
