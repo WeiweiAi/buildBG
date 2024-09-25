@@ -5,10 +5,6 @@ from utilities import *
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
-""" Misc. Constants of CellML construction """
-MATH_HEADER = '<math xmlns="http://www.w3.org/1998/Math/MathML" xmlns:cellml="http://www.cellml.org/cellml/2.0#">\n'
-MATH_FOOTER = '</math>\n'
-
 defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","farad","gram","gray","henry",
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
     "newton","ohm","pascal","radian","second","siemens","sievert","steradian","tesla","volt","watt","weber"]
@@ -31,9 +27,16 @@ def infix_to_mathml(ode_var,infix, voi=''):
     mathstr = mathstr.replace ('</math>', '')
     mathstr = mathstr.replace ('<?xml version="1.0" encoding="UTF-8"?>', '')
     # temporary solution to add cellml units for constant in the mathML string, replace <cn type="integer"> to <cn cellml:units="dimensionless">
-    mathstr = mathstr.replace ('<cn type="integer">', '<cn cellml:units="dimensionless">')
-    # add left side of the equation       
+    # check if <cn type="integer"> is in the mathML string
+    if '<cn type="integer">' in mathstr:
+        mathstr = mathstr.replace ('<cn type="integer">', '<cn cellml:units="dimensionless">')
+        # add left side of the equation       
     mathstr = preforumla + mathstr + postformula
+    # add the cellml namespace to the mathML string
+    if '<cn cellml:units="dimensionless">' in mathstr:
+        mathstr = '<apply xmlns:cellml="http://www.cellml.org/cellml/1.1#">' + mathstr + ' </apply>'
+    else:
+        mathstr = '<apply>' + mathstr + ' </apply>'
     return mathstr
 
 def json2CellMLV1_param(json_file, model_name, component_name):
@@ -57,23 +60,28 @@ def json2CellMLV1_param(json_file, model_name, component_name):
     comp_dict=load_json(json_file)
     # Define namespaces with the 'cellml' prefix explicitly included
     namespaces = {
-        '': "http://www.cellml.org/cellml/1.1#",  # Default namespace
-        'xlink': "http://www.w3.org/1999/xlink",
+        'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace
+        'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
+        'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
     }
-    # Register namespaces
-    for prefix, uri in namespaces.items():
-        ET.register_namespace(prefix, uri)
 
-    # Create the root model element with namespaces
-    model = ET.Element(ET.QName(namespaces[''], 'model'), {
-        'name': model_name
-    })
+    # register the CellML namespace
+    ET.register_namespace('cellml', namespaces['cellml'])
 
-    # Add units import
-    units_import = ET.SubElement(model, ET.QName(namespaces[''], 'import'), {ET.QName(namespaces['xlink'], 'href'): './units.cellml'}) 
+    # Create the root model element without auto-generated prefixes
+    model_attrs = {
+        'name': model_name,
+        'xmlns': namespaces['cellml'],  
+        'xmlns:cellml': namespaces['cellml'],  # Explicitly add the prefix for CellML
+        'xmlns:xlink': namespaces['xlink']  # Explicitly add the prefix for XLink
+    }
+    model = ET.Element('model', model_attrs)
+
+    units_import = ET.SubElement(model, 'import')
+    units_import.set('xlink:href', './units.cellml')  # Set the xlink prefix directly 
     param_units_Set=set()     
     # Add component and param variables
-    component = ET.SubElement(model, ET.QName(namespaces[''], 'component'), {'name': component_name})
+    component = ET.SubElement(model, 'component', {'name': component_name})
     params_set=set()
     for comp in comp_dict:
         for param in comp_dict[comp]['params']:
@@ -89,14 +97,14 @@ def json2CellMLV1_param(json_file, model_name, component_name):
                     variable_attributes['public_interface'] = comp_dict[comp]['params'][param]['IO']
                 else:
                     variable_attributes['public_interface'] = 'out' # default is output
-                ET.SubElement(component, ET.QName(namespaces[''], 'variable'), variable_attributes)
+                ET.SubElement(component, 'variable', variable_attributes)
                 params_set.add(comp_dict[comp]['params'][param]['symbol'])
             else:
                 pass
 
     for units_name in param_units_Set:
         if units_name not in defUnit:
-            units_import_i = ET.SubElement(units_import, ET.QName(namespaces[''], 'units'), {'name': units_name, 'units_ref': units_name})  
+            units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})  
 
     return model
 
@@ -121,35 +129,35 @@ def json2CellMLV1_model(json_file, model_name, component_name):
     comp_dict=load_json(json_file)
     # Define namespaces with the 'cellml' prefix explicitly included
     namespaces = {
-        '': "http://www.cellml.org/cellml/1.1#",  # Default namespace
-        'xlink': "http://www.w3.org/1999/xlink",
+        'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace
+        'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
+        'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
     }
-    # Register namespaces
-    for prefix, uri in namespaces.items():
-        ET.register_namespace(prefix, uri)
 
-    # Create the root model element with namespaces
-    model = ET.Element(ET.QName(namespaces[''], 'model'), {
-        'name': model_name
-    })
+    # register the CellML namespace
+    ET.register_namespace('cellml', namespaces['cellml'])
 
-    # Add units import
-    units_import = ET.SubElement(model, ET.QName(namespaces[''], 'import'), {ET.QName(namespaces['xlink'], 'href'): './units.cellml'})
+    # Create the root model element without auto-generated prefixes
+    model_attrs = {
+        'name': model_name,
+        'xmlns': namespaces['cellml'],  
+        #'xmlns:cellml': namespaces['cellml'],  # Explicitly add the prefix for CellML
+        'xmlns:xlink': namespaces['xlink']  # Explicitly add the prefix for XLink
+    }
+    model = ET.Element('model', model_attrs)
+
+    units_import = ET.SubElement(model, 'import')
+    units_import.set('xlink:href', './units.cellml')  # Set the xlink prefix directly 
     # Collect all units used in the model and add them to the import
     units_set = set()    
     # Add component and variables
-    component = ET.SubElement(model, ET.QName(namespaces[''], 'component'), {'name': component_name})
-
-    # Create the <math> element
-    math_ns = "http://www.w3.org/1998/Math/MathML"
-    math_element = ET.Element(ET.QName(math_ns, 'math'))
-    math_element.set('xmlns', math_ns)
-    # Collect parameters, variables, and state variables 
+    component = ET.SubElement(model, 'component', {'name': component_name})
+    # Create the MathML element with the correct namespace
+    mathml_element = ET.Element('math', {'xmlns': namespaces['math']})
     param_set = set()
     var_set = set()
     param_attrs = []
     var_attrs = []
-    state_var_attrs = []
     for comp in comp_dict:
         if 'params' not in comp_dict[comp]:
             comp_dict[comp]['params'] = {}
@@ -176,66 +184,54 @@ def json2CellMLV1_model(json_file, model_name, component_name):
             else:
                 if comp_dict[comp]['vars'][var]['symbol'] not in var_set:
                     var_set.add(comp_dict[comp]['vars'][var]['symbol'])
-                    variable_attributes = {
-                        'name': comp_dict[comp]['vars'][var]['symbol'],
-                        'units': comp_dict[comp]['vars'][var]['units']
-                    }
+                    if 'initial value' in comp_dict[comp]['vars'][var]:
+                        if isinstance(comp_dict[comp]['vars'][var]['initial value'], str):
+                            initial_value_str = comp_dict[comp]['params'][comp_dict[comp]['vars'][var]['initial value']]['symbol']
+                        else:
+                            initial_value_str = str(comp_dict[comp]['vars'][var]['initial value'])
+                        variable_attributes = {
+                            'name': comp_dict[comp]['vars'][var]['symbol'],
+                            'units': comp_dict[comp]['vars'][var]['units'],
+                            'initial_value': initial_value_str
+                        }
+                    else:
+                        variable_attributes = {
+                            'name': comp_dict[comp]['vars'][var]['symbol'],
+                            'units': comp_dict[comp]['vars'][var]['units']
+                        }
                     units_set.add(comp_dict[comp]['vars'][var]['units'])
                     if 'IO' in comp_dict[comp]['vars'][var]:
                         variable_attributes['public_interface'] = comp_dict[comp]['vars'][var]['IO']                
                     var_attrs.append(variable_attributes)
-                    
-        if 'state_vars' in comp_dict[comp].keys():
-            for state_var in comp_dict[comp]['state_vars']:
-                q_init = comp_dict[comp]['state_vars'][state_var]['value']
-                if isinstance(q_init, str):
-                    q_init_str = comp_dict[comp]['params'][q_init]['symbol']
-                else:
-                    q_init_str = str(q_init)
-                variable_attributes = {
-                    'name': comp_dict[comp]['state_vars'][state_var]['symbol'],
-                    'units': comp_dict[comp]['state_vars'][state_var]['units'],
-                    'initial_value': q_init_str
-                }
-                units_set.add(comp_dict[comp]['state_vars'][state_var]['units'])
-                if 'IO' in comp_dict[comp]['state_vars'][state_var]:
-                    variable_attributes['public_interface'] = comp_dict[comp]['state_vars'][state_var]['IO']
-                else:
-                    pass # default is internal
-                state_var_attrs.append(variable_attributes)
+        
         if 'constitutive_eqs' not in comp_dict[comp]:
             comp_dict[comp]['constitutive_eqs'] = []
         for equation in comp_dict[comp]['constitutive_eqs']:
             mmathml_string = infix_to_mathml(equation[0], equation[1], equation[2])
         # Parse the MathML string
-            mathml_element = ET.fromstring(mmathml_string)
-            math_element.append(mathml_element)
-        #for equation in comp_dict[comp]['conservation_eqs']:
-        #    mmathml_string = infix_to_mathml(equation[0], equation[1], equation[2])
-        # Parse the MathML string
-        #    mathml_element = ET.fromstring(mmathml_string)
-        #    math_element.append(mathml_element)
+            try:
+                # Convert the generated math string into an XML element
+                math_content = ET.fromstring(mmathml_string)
+                if len(math_content) > 0:
+                    mathml_element.append(math_content[0])  # Append the first child, which is the actual content
+            except ET.ParseError as e:
+                print(f"Error parsing MathML: {e}")
     # Add units import
     for units_name in units_set:
         if units_name not in defUnit:
-            units_import_i = ET.SubElement(units_import, ET.QName(namespaces[''], 'units'), {'name': units_name, 'units_ref': units_name})
+            units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})
 
     # Add parameters
     for param_attr in param_attrs:
-        ET.SubElement(component, ET.QName(namespaces[''], 'variable'), param_attr)
+        ET.SubElement(component, 'variable', param_attr)
     # Add variables
     for var_attr in var_attrs:
-        ET.SubElement(component, ET.QName(namespaces[''], 'variable'), var_attr)
-    # Add state variables
-    for state_var_attr in state_var_attrs:
-        ET.SubElement(component, ET.QName(namespaces[''], 'variable'), state_var_attr)
+        ET.SubElement(component, 'variable', var_attr)
 
      # Append the <math> element to the component
-    component.append(math_element)
+    component.append(mathml_element)
 
     return model
-
-
 
 def write_cellmlV1 (model,model_file):
     """Write the model to a CellML V1.x file
@@ -263,8 +259,8 @@ def write_cellmlV1 (model,model_file):
 
 if __name__ == "__main__": 
 
-    param_model=json2CellMLV1_param('./data/SLC2_BG.json', 'test_model_param', 'param_component')
-    test_model= json2CellMLV1_model('./data/SLC2_BG.json', 'test_model', 'component_test')
+    param_model=json2CellMLV1_param('./data/SLC5_BG.json', 'test_model_param', 'param_component')
+    test_model= json2CellMLV1_model('./data/SLC5_BG.json', 'test_model', 'component_test')
     write_cellmlV1(param_model,'test_model_param.cellml')
     write_cellmlV1(test_model,'test_model.cellml')
     

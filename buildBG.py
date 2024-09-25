@@ -75,35 +75,39 @@ def load_matrix(matrix):
     
     return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
-def build_BG_Dict(matrix,bg_components_json,bg_dict, direction):
+def add_BG_components(bg_dict,bg_components_json, matrix, symbol=True):
     """
-    Build the dictionary for the components and connections from the stoichiometric matrix
+    Add the components from the stoichiometric matrix to the bond graph model
+    The components are defined in BG_components.
+    The ID of the components is the key of the dictionary BG_components.
+    The components in the row take the potential as the input and the flow as the output, and we call them F components.
+    The components in the column take the flow as the input and the potential as the output, and we call them E components.
+    The csv file should have the following format (* means blank):
+    *       *     *      fName fName
+    *       *     *       fID   fID
+    *       *     *      fPort fPort
+    eName  eID  ePort      0    1 
+    eName  eID  ePort      1    0
+    
     Parameters
     ----------
-    matrix : str
-        The file path of the stoichiometric matrix
-        The csv file should have the following format (* means blank):
-         *       *     *      fName fName
-         *       *     *       fID   fID
-         *       *     *      fPort fPort
-        eName   eID   ePort      0    1 
-        eName   eID   ePort      1    0
-    bg_components_json : str
-        The file path of the json file of the BG components
     bg_dict : dict
         The dictionary of the bond graph model
-        Can be empty or have some components already
-    direction : str
-        The direction of the flow
-        'e2f': from E (0 node) to F (1 node)
-        'f2e': from F (1 node) to E (0 node)
+    bg_components_json : str
+        The file path of the json file of the BG components
+    matrix : str
+        The file path of the stoichiometric matrix
+    symbol : bool, optional
+        If True, the symbols of the parameters, variables and state variables are updated with the component name as the suffix
+        The default is True.
+    
     Returns
     -------
     None
 
     side effect
     ------------
-    Update the bg_dict dictionary with the components and connections from the stoichiometric matrix
+    Update the bg_dict dictionary with the components from the stoichiometric matrix
     """
     eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
     bg_components=load_json(bg_components_json)
@@ -112,62 +116,93 @@ def build_BG_Dict(matrix,bg_components_json,bg_dict, direction):
     # update the symbols of the parameters, variables and state variables for the components  
     for i in range(len(cNames)):
         cID=cIDs[i]
-        cIndex=cNames[i]# cIndex is the key for the dictionary, make it unique; 
-        if cID in bg_components.keys() and cIndex not in bg_dict.keys():
-            bg_dict[cIndex]=copy.deepcopy(bg_components[cID])
-            bg_dict[cIndex]['constitutive_eqs']=[]
-            bg_dict[cIndex]['conservation_eqs']=[]
-            # Rename the parameters, variables and state variables with the component name as the suffix
-            for param in bg_dict[cIndex]['params'].keys():
-                if param not in params_common:
-                    bg_dict[cIndex]['params'][param]['symbol']=bg_dict[cIndex]['params'][param]['symbol']+ '_' + cIndex
-            for var in bg_dict[cIndex]['vars'].keys():
-                bg_dict[cIndex]['vars'][var]['symbol']=bg_dict[cIndex]['vars'][var]['symbol']+ '_' + cIndex
-            if 'state_vars' in bg_components[cID].keys():                  
-                for state_var in bg_components[cID]['state_vars'].keys():
-                    bg_dict[cIndex]['state_vars'][state_var]['symbol']=bg_dict[cIndex]['state_vars'][state_var]['symbol']+ '_' + cIndex            
-        elif cID not in bg_components.keys():
+        if cID not in bg_components.keys():
             raise ValueError('The component type is not found in the BG_components')
+        cIndex=cNames[i]# cIndex is the key for the dictionary, make it unique; 
+        if cIndex not in bg_dict.keys(): # only add the component if it is not in the dictionary
+            bg_dict[cIndex]=copy.deepcopy(bg_components[cID])
+            # Rename the parameters, variables and state variables with the component name as the suffix if symbol=True
+            if symbol:
+                for param in bg_dict[cIndex]['params'].keys():
+                    if param not in params_common:
+                        bg_dict[cIndex]['params'][param]['symbol']=bg_dict[cIndex]['params'][param]['symbol']+ '_' + cIndex
+                for var in bg_dict[cIndex]['vars'].keys():
+                    bg_dict[cIndex]['vars'][var]['symbol']=bg_dict[cIndex]['vars'][var]['symbol']+ '_' + cIndex 
         else:
             pass
+
+def add_BG_connections(bg_dict, matrix, direction):
+    """
+    Add the connections from the stoichiometric matrix to the bond graph model
+    The components are defined in BG_components.
+    The ID of the components is the key of the dictionary BG_components.
+    The components in the row take the potential as the input and the flow as the output, and we call them F components.
+    The components in the column take the flow as the input and the potential as the output, and we call them E components.
+    The csv file should have the following format (* means blank):
+    *       *     *      fName fName
+    *       *     *       fID   fID
+    *       *     *      fPort fPort
+    eName  eID  ePort      0    1 
+    eName  eID  ePort      1    0
+    
+    Parameters
+    ----------
+    bg_dict : dict
+        The dictionary of the bond graph model
+    matrix : str
+        The file path of the stoichiometric matrix
+    direction : str
+        The direction of the flow
+        'e2f': from E (0 node) to F (1 node)
+        'f2e': from F (1 node) to E (0 node)
+    
+    Returns
+    -------
+    None
+
+    side effect
+    ------------
+    Update the bg_dict dictionary with the connections from the stoichiometric matrix
+    """
+    eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
     # update the connections of the components
     for j in range(len(fName)):
         fIndex=fName[j]
         portF=fPort[j]
-        if 's' in portF: # signal port number starts with s
-            connectionF='signals'
-        else:
-            connectionF='ports'
+        if fIndex not in bg_dict.keys():
+            raise ValueError('The component is not found in the BG dictionary')
+        if portF not in bg_dict[fIndex]['ports'].keys():
+            raise ValueError('The port is not found in the component')
         for i in range(len(eName)):
             eIndex=eName[i]
             portE = ePort[i]
-            if 's' in portE:
-                connectionE='signals'
-            else:
-                connectionE='ports'
+            if eIndex not in bg_dict.keys():
+                raise ValueError('The component is not found in the BG dictionary')
+            if portE not in bg_dict[eIndex]['ports'].keys():
+                raise ValueError('The port is not found in the component')
             if N[i,j]!=0:
-                if connectionF=='ports' and connectionE=='ports':
-                    bg_dict[fIndex][connectionF][portF]['type']='e_in'
-                    bg_dict[eIndex][connectionE][portE]['type']='e_out'
-                if connectionF=='signals':
-                   bg_dict[fIndex][connectionF][portF]['type']='s_in'
-                if connectionE=='signals':
-                   bg_dict[eIndex][connectionE][portE]['type']='s_out'  # signal from e to f                    
+                if bg_dict[fIndex]['ports'][portF]['type']=='Power' and bg_dict[eIndex]['ports'][portE]['type']=='Power':
+                    bg_dict[fIndex]['ports'][portF]['causality']='e_in'
+                    bg_dict[eIndex]['ports'][portE]['causality']='e_out'
+                if bg_dict[fIndex]['ports'][portF]['type']=='Signal':
+                   bg_dict[fIndex]['ports'][portF]['causality']='s_in'
+                if bg_dict[eIndex]['ports'][portE]['type']=='Signal':
+                   bg_dict[eIndex]['ports'][portE]['causality']='s_out'  # signal from e to f                    
                 if direction == 'e2f':
                     if N[i,j]>0:
-                        bg_dict[fIndex][connectionF][portF]['in']+=[[eIndex, portE, str(N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['out']+=[[fIndex, portF, str(N[i,j])]]
+                        bg_dict[fIndex]['ports'][portF]['in']+=[[eIndex, portE, str(N[i,j])]]
+                        bg_dict[eIndex]['ports'][portE]['out']+=[[fIndex, portF, str(N[i,j])]]
                     else:
-                        bg_dict[fIndex][connectionF][portF]['out']+=[[eIndex, portE, str(-N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['in']+=[[fIndex, portF, str(-N[i,j])]]
+                        bg_dict[fIndex]['ports'][portF]['out']+=[[eIndex, portE, str(-N[i,j])]]
+                        bg_dict[eIndex]['ports'][portE]['in']+=[[fIndex, portF, str(-N[i,j])]]
                        
                 elif direction == 'f2e':                                                                   
                     if N[i,j]>0:
-                        bg_dict[fIndex][connectionF][portF]['out']+=[[eIndex, portE, str(N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['in']+=[[fIndex, portF, str(N[i,j])]]
+                        bg_dict[fIndex]['ports'][portF]['out']+=[[eIndex, portE, str(N[i,j])]]
+                        bg_dict[eIndex]['ports'][portE]['in']+=[[fIndex, portF, str(N[i,j])]]
                     else:
-                        bg_dict[fIndex][connectionF][portF]['in']+=[[eIndex, portE, str(-N[i,j])]]
-                        bg_dict[eIndex][connectionE][portE]['out']+=[[fIndex, portF, str(-N[i,j])]]
+                        bg_dict[fIndex]['ports'][portF]['in']+=[[eIndex, portE, str(-N[i,j])]]
+                        bg_dict[eIndex]['ports'][portE]['out']+=[[fIndex, portF, str(-N[i,j])]]
                 else:
                     raise ValueError('The direction is not correct') 
 
@@ -203,11 +238,7 @@ def update_BG_eqn(bg_dict,voi):
         for comp in sub_comps:
             cIndex=comp[0]
             portN=comp[1]
-            stochoimetry=comp[2]
-            if 's' in portN:
-                connectionN='signals'
-            else:
-                connectionN='ports'          
+            stochoimetry=comp[2]       
             try:
                 num_stochoimetry=int(stochoimetry)
             except:
@@ -215,16 +246,16 @@ def update_BG_eqn(bg_dict,voi):
                     num_stochoimetry=float(stochoimetry)
                 except:
                     raise ValueError('The stochoimetry is not an integer or a float')
-            if bg_dict[cIndex][connectionN][portN]['type']=='e_out':
+            if bg_dict[cIndex]['ports'][portN]['causality']=='e_out':
                 multiports+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['e_'+portN]['symbol'])   
-            elif bg_dict[cIndex][connectionN][portN]['type']=='e_in':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='e_in':
                 multiports+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
-            elif bg_dict[cIndex][connectionN][portN]['type']=='s_out':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='s_out':
                 pass
-            elif bg_dict[cIndex][connectionN][portN]['type']=='s_in':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='s_in':
                 pass
             else:
-                raise ValueError('The port number or variable type is not correct')
+                raise ValueError('The port number or variable causality is not correct')
                         
         return multiports
     
@@ -233,11 +264,7 @@ def update_BG_eqn(bg_dict,voi):
         for comp in sub_comps:
             cIndex=comp[0]
             portN=comp[1]
-            stochoimetry=comp[2]
-            if 's' in portN:
-                connectionN='signals'
-            else:
-                connectionN='ports'          
+            stochoimetry=comp[2]       
             try:
                 num_stochoimetry=int(stochoimetry)
             except:
@@ -245,48 +272,50 @@ def update_BG_eqn(bg_dict,voi):
                     num_stochoimetry=float(stochoimetry)
                 except:
                     raise ValueError('The stochoimetry is not an integer or a float')
-            if bg_dict[cIndex][connectionN][portN]['type']=='e_out':
+            if bg_dict[cIndex]['ports'][portN]['causality']=='e_out':
                 signal+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['e_'+portN]['symbol'])   
-            elif bg_dict[cIndex][connectionN][portN]['type']=='e_in':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='e_in':
                 signal+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
-            elif bg_dict[cIndex][connectionN][portN]['type']=='s_out':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='s_out':
                 signal+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['s_'+portN]['symbol'])
             else:
-                raise ValueError('The port number or variable type is not correct')
+                raise ValueError('The port number or variable causality is not correct')
                         
         return signal
     
     for key, comp in bg_dict.items():
+        comp['conservation_eqs']=[]
         # get the inputs for the ports
         for port in comp['ports']:
-            sub_comps_in=comp['ports'][port]['in']
-            bonds_inward=sum_bonds(sub_comps_in)         
-            sub_comps_out=comp['ports'][port]['out']
-            bonds_outward=sum_bonds(sub_comps_out)
-            if comp['ports'][port]['direction']=='in':
-                inputs_sum=bonds_inward-bonds_outward
+            if comp['ports'][port]['type']=='Power':
+                sub_comps_in=comp['ports'][port]['in']
+                bonds_inward=sum_bonds(sub_comps_in)         
+                sub_comps_out=comp['ports'][port]['out']
+                bonds_outward=sum_bonds(sub_comps_out)
+                if comp['ports'][port]['direction']=='in':
+                    inputs_sum=bonds_inward-bonds_outward
+                else:
+                    inputs_sum=bonds_outward-bonds_inward
+                 # replace the input variables with the real inputs
+                if comp['ports'][port]['causality']=='e_in':
+                    comp['vars']['e_'+port]['expression']=ccode(inputs_sum)
+                    comp['conservation_eqs']+= [[ comp['vars']['e_'+port]['symbol'],ccode(inputs_sum), '']]
+                elif comp['ports'][port]['causality']=='e_out':
+                    comp['vars']['f_'+port]['expression']=ccode(inputs_sum)
+                    comp['conservation_eqs']+= [[ comp['vars']['f_'+port]['symbol'],ccode(inputs_sum), '']]
+
+            elif comp['ports'][port]['type']=='Signal':
+                sub_comps_in=comp['ports'][port]['in']
+                signal_in_=signal_in(sub_comps_in)
+                comp['vars']['s_'+port]['expression']=ccode(signal_in_)
+                comp['conservation_eqs']+= [[ comp['vars']['s_'+port]['symbol'],ccode(signal_in_), '']]
             else:
-                inputs_sum=bonds_outward-bonds_inward
-             # replace the input variables with the real inputs
-            if comp['ports'][port]['type']=='e_in':
-                comp['vars']['e_'+port]['expression']=ccode(inputs_sum)
-                comp['conservation_eqs']+= [[ comp['vars']['e_'+port]['symbol'],ccode(inputs_sum), '']]
-            elif comp['ports'][port]['type']=='e_out':
-                comp['vars']['f_'+port]['expression']=ccode(inputs_sum)
-                comp['conservation_eqs']+= [[ comp['vars']['f_'+port]['symbol'],ccode(inputs_sum), '']]
-        
+                raise ValueError('The port description is not correct')            
+        comp['constitutive_eqs']=[]
         if 'vars' in comp.keys():
             var_dict_= copy.deepcopy(comp['vars'])
-        if 'state_vars' in comp.keys():
-            var_dict_.update( copy.deepcopy(comp['state_vars']))
         if 'params' in comp.keys():
             var_dict_.update( copy.deepcopy(comp['params']))
-
-        for signal in comp['signals']:
-            sub_comps_in=comp['signals'][signal]['in']
-            signal_in_=signal_in(sub_comps_in)
-            comp['vars']['s_'+signal]['expression']=ccode(signal_in_)
-            comp['constitutive_eqs']+= [[ comp['vars']['s_'+signal]['symbol'],ccode(signal_in_), '']]
         # update the constitutive relations template
         for str_expr in comp['constitutive_relations']:
             if 'ode' in str_expr:
@@ -299,11 +328,11 @@ def update_BG_eqn(bg_dict,voi):
                         expr=expr.subs(symbols(ikey),sympify(var_dict_[ikey]['expression']))
                     else:
                         expr=expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
-                comp['constitutive_eqs']+= [[comp['state_vars'][yvar]['symbol'], ccode(expr),  voi['symbol']]]
+                comp['constitutive_eqs']+= [[comp['vars'][yvar]['symbol'], ccode(expr),  voi['symbol']]]
             else:
                 expr=sympify(str_expr)
                 for port in comp['ports']:
-                    if comp['ports'][port]['type']=='e_in' and symbols('f_'+port) in expr.free_symbols:
+                    if comp['ports'][port]['causality']=='e_in' and symbols('f_'+port) in expr.free_symbols:
                        var_=solve(expr, symbols('f_'+port))
                        if len(var_)==0:
                             raise ValueError('The equation is not solvable')
@@ -316,7 +345,7 @@ def update_BG_eqn(bg_dict,voi):
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                        comp['constitutive_eqs']+= [[comp['vars']['f_'+port]['symbol'], ccode(solved_expr), '']]
                        
-                    if comp['ports'][port]['type']=='e_out' and symbols('e_'+port) in expr.free_symbols:
+                    if comp['ports'][port]['causality']=='e_out' and symbols('e_'+port) in expr.free_symbols:
                         var_=solve(expr, symbols('e_'+port))
                         if len(var_)==0:
                             raise ValueError('The equation is not solvable')
@@ -328,16 +357,16 @@ def update_BG_eqn(bg_dict,voi):
                             else:
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                         comp['constitutive_eqs']+= [[comp['vars']['e_'+port]['symbol'], ccode(solved_expr), '']]
-                for signal in comp['signals']:
-                    if comp['signals'][signal]['type']=='s_out' and symbols('s_'+signal) in expr.free_symbols:
-                        var_=solve(expr, symbols('s_'+signal))
+                    
+                    if comp['ports'][port]['causality']=='s_out' and symbols('s_'+port) in expr.free_symbols:
+                        var_=solve(expr, symbols('s_'+port))
                         solved_expr=var_[0]
                         for ikey,ivar in var_dict_.items():
                             if 'expression' in var_dict_[ikey].keys():
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['expression']))
                             else:
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
-                        comp['constitutive_eqs']+= [[comp['vars']['s_'+signal]['symbol'], ccode(solved_expr), '']]               
+                        comp['constitutive_eqs']+= [[comp['vars']['s_'+port]['symbol'], ccode(solved_expr), '']]                                  
 
 def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
     """
@@ -449,15 +478,16 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
 
     return kappa, K, K_eq, diff_, zero_est
 
-def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
+def update_BioBG_params(bg_dict, kappa, fName, K, eName):
     """
-    Update the BG parameters in the bg_dict with the parameters
+    Update the BG parameters of biochemitry components in the bg_dict
+    
 
     Parameters
     ----------
     bg_dict : dict
         The dictionary of the bond graph model
-    kappa : numpy.ndarra
+    kappa : numpy.ndarray
         The reaction rate constants
     fName : list
         A list of reaction component Re names
@@ -467,6 +497,65 @@ def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
     eName : list
         A list of species component Ce names
         The order of the names should be the same as the order of the kappa
+
+    Returns
+    -------
+    None
+
+    side effect
+    ------------
+    Update the parameters of the biochemitry components
+    """
+    for i in range(len(fName)):
+        if abs(kappa[i][0])<1e-2 or abs(kappa[i][0])>1e2:
+            kappa_="{:.3e}".format(kappa[i][0])
+        else:
+            kappa_="{:.3f}".format(kappa[i][0])
+        bg_dict[fName[i]]['params']['kappa']['value']=kappa_
+    for i in range(len(eName)):
+        if abs(K[i][0])<1e-2 or abs(K[i][0])>1e2:
+            K_="{:.3e}".format(K[i][0])
+        else:
+            K_="{:.3f}".format(K[i][0])
+        bg_dict[eName[i]]['params']['K']['value']=K_    
+
+def update_BG_params(bg_dict, comp_name, param_val, param_name):
+    """
+    Update the BG parameters in the bg_dict
+
+    Parameters
+    ----------
+    bg_dict : dict
+        The dictionary of the bond graph model
+    comp_name : str array
+        The component name
+    param_val : numpy.ndarray
+        The parameter value
+    param_name : str array
+        The parameter name
+
+    Returns
+    -------
+    None
+
+    side effect
+    ------------
+    Update the parameters of the component
+
+    """
+    for i in range(len(comp_name)):
+        bg_dict[comp_name[i]]['params'][param_name[i]]['value']=param_val[i]
+
+def write_params_csv(param_val, param_name,csv_file='params_BG.csv'):
+    """
+    Update the BG parameters in the bg_dict with the parameters
+
+    Parameters
+    ----------
+    param_val : numpy.ndarray
+        The parameter value
+    param_name : str array
+        The parameter name
     csv : str, optional
         The file path of the csv file to save the parameters
         The default is 'params_BG.csv'.
@@ -477,42 +566,16 @@ def update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv'):
 
     side effect
     ------------
-    Update the parameters of the components
     Save the parameters to a csv file
 
     """
-    def toLatexStr (var_name):
-        sub_str_1=var_name.split('_')[0]
-        if len(var_name.split('_'))>1:
-            sub_str_2=var_name.split('_')[1]
-            latex_str='$\\'+sub_str_1+'_{'+sub_str_2+'}$'
-        else:
-            sub_str_2=''
-            latex_str='$\\'+sub_str_1+'$'
-
-        return latex_str
     
     with open(csv_file, mode='w') as file:
         writer = csv.writer(file)
         writer.writerow(['Parameter', 'Value'])
-        for i in range(len(fName)):
-            if abs(kappa[i][0])<1e-2 or abs(kappa[i][0])>1e2:
-                kappa_="{:.3e}".format(kappa[i][0])
-            else:
-                kappa_="{:.3f}".format(kappa[i][0])
-            bg_dict[fName[i]]['params']['kappa']['value']=kappa_
-            var_name=bg_dict[fName[i]]['params']['kappa']['symbol']
-            latex_str=toLatexStr(var_name)
-            writer.writerow([latex_str, kappa_])
-        for i in range(len(eName)):
-            if abs(K[i][0])<1e-2 or abs(K[i][0])>1e2:
-                K_="{:.3e}".format(K[i][0])
-            else:
-                K_="{:.3f}".format(K[i][0])
-            bg_dict[eName[i]]['params']['K']['value']=K_
-            var_name=bg_dict[eName[i]]['params']['K']['symbol']
-            latex_str=toLatexStr(var_name)
-            writer.writerow([latex_str, K_])     
+        for i in range(len(param_val)):
+            writer.writerow([param_name[i], param_val[i]])
+        file.close()
 
 def build_AdjacencyMatrix_(bg_dict):
     """
@@ -527,7 +590,7 @@ def build_AdjacencyMatrix_(bg_dict):
         Requires the bond information for each component:
         comp['ports'][port]['in'] is a list of the inward connections
         comp['ports'][port]['out'] is a list of the outward connections
-        comp['ports'][port]['type'] is the type of the port (e_in, e_out)
+        comp['ports'][port]['causality'] define the direction of the effort variable of the port (e_in, e_out)
         comp['ports'][port]['direction'] is the positive direction of flow (in or out) relative to the component
         comp['vars']['e_'+port]['expression'] is the sympy expression of the potential on the port, optional
         comp['vars']['f_'+port]['expression'] is the sympy expression of the flow on the port, optional
@@ -590,10 +653,10 @@ def build_AdjacencyMatrix_(bg_dict):
                             raise ValueError('The stochoimetry is not an integer or a float')                    
                     indexj=comp_port.index(cIndex+','+portN)
                     A[indexj][indexi]=1
-                    if comp['ports'][port]['type']=='e_in':
+                    if comp['ports'][port]['causality']=='e_in':
                         e_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol'])
                         f_bond_str=sympify(f_str)
-                    elif comp['ports'][port]['type']=='e_out':
+                    elif comp['ports'][port]['causality']=='e_out':
                         e_bond_str=sympify(e_str)
                         f_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
                     P_bond_expr[indexj][indexi]=e_bond_str*f_bond_str
@@ -610,10 +673,10 @@ def build_AdjacencyMatrix_(bg_dict):
                             raise ValueError('The stochoimetry is not an integer or a float')
                     indexj=comp_port.index(cIndex+','+portN)
                     A[indexi][indexj]=1
-                    if comp['ports'][port]['type']=='e_in':
+                    if comp['ports'][port]['causality']=='e_in':
                         e_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['e_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['e_'+portN].keys() else bg_dict[cIndex]['vars']['e_'+portN]['symbol'])
                         f_bond_str=sympify(f_str)
-                    elif comp['ports'][port]['type']=='e_out':
+                    elif comp['ports'][port]['causality']=='e_out':
                         e_bond_str=sympify(e_str)
                         f_bond_str=num_stochoimetry*sympify(bg_dict[cIndex]['vars']['f_'+portN]['expression'] if 'expression' in bg_dict[cIndex]['vars']['f_'+portN].keys() else bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
                     P_bond_expr[indexi][indexj]=e_bond_str*f_bond_str
@@ -730,7 +793,7 @@ def calc_energy(bg_json,result_csv):
         A_comp_val[i]=np.trapz(np.abs(P_comp_vec),simResults_df['t'])
         A_total+=A_comp_val[i]
         df_power_comp[key]=P_comp_vec
-        df_activity_comp[key]=integrate.cumulative_simpson(np.abs(P_comp_vec),x=simResults_df['t'],initial=0)
+        df_activity_comp[key]=integrate.cumulative_trapezoid(np.abs(P_comp_vec),x=simResults_df['t'],initial=0)
         P_comp_expr_+=[key+':   '+str(P_comp_expr[key])]
         i+=1
            
@@ -762,9 +825,10 @@ if __name__ == "__main__":
     # build the bond graph model
     bg_dict={}       
     direction = 'e2f'
-    build_BG_Dict(fmatrix,bg_components_json,bg_dict,direction)
+    add_BG_components(bg_dict,bg_components_json, fmatrix)
+    add_BG_connections(bg_dict, fmatrix, direction)
     direction = 'f2e'
-    build_BG_Dict(rmatrix,bg_components_json,bg_dict,direction)
+    add_BG_connections(bg_dict, rmatrix, direction)
     
     # update the equations of the bond graph model
     voi={'description': 'Time', 'units': 'second', 'symbol': 't'}
@@ -806,15 +870,18 @@ if __name__ == "__main__":
     V_i=8.5e5
     Ws=np.array([[V_i,V_o,V_i,V_o,V_E,V_E,V_E,V_E,V_E,V_E]]).transpose()
     kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
-    update_BG_params(bg_dict, kappa, fName, K, eName, csv_file='params_BG.csv')
-
+    update_BioBG_params(bg_dict, kappa, fName, K, eName)
+    # combine K and kappa to a single array
+    param_val=np.concatenate((kappa,K))
+    param_name=fName+eName
+    write_params_csv(param_val,param_name,csv_file='params_BG.csv')
     # save the bond graph model to a json file
     json_file=file_path+'SLC5_BG.json'    
     save_json(bg_dict, json_file)   
 
     # calculate the energy and activity of the bond graph model
     file_path=r'C:\Users\wai484\temp\Energy-based-System-Analysis\models\\'
-    calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA.csv')
+   # calc_energy(file_path+'SLC5_BG.json',file_path+'report_task_SGLT1_BGEA.csv')
 
 
 
