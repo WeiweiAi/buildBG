@@ -10,6 +10,12 @@ defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","far
     "newton","ohm","pascal","radian","second","siemens","sievert","steradian","tesla","volt","watt","weber"]
 params_common=['R','T','F']
 
+CellMLV1_namespaces = {
+        'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace
+        'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
+        'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
+    }
+
 def infix_to_mathml(ode_var,infix, voi=''):
     if voi!='':
         preforumla = '<apply> <eq/> <apply> <diff/> <bvar> <ci>'+ voi + '</ci> </bvar> <ci>' + ode_var + '</ci> </apply> '
@@ -28,8 +34,9 @@ def infix_to_mathml(ode_var,infix, voi=''):
     mathstr = mathstr.replace ('<?xml version="1.0" encoding="UTF-8"?>', '')
     # temporary solution to add cellml units for constant in the mathML string, replace <cn type="integer"> to <cn cellml:units="dimensionless">
     # check if <cn type="integer"> is in the mathML string
-    if '<cn type="integer">' in mathstr:
+    if '<cn type="integer">' in mathstr or '<cn type="real">' in mathstr:
         mathstr = mathstr.replace ('<cn type="integer">', '<cn cellml:units="dimensionless">')
+        mathstr = mathstr.replace ('<cn type="real">', '<cn cellml:units="dimensionless">')
         # add left side of the equation       
     mathstr = preforumla + mathstr + postformula
     # add the cellml namespace to the mathML string
@@ -39,174 +46,230 @@ def infix_to_mathml(ode_var,infix, voi=''):
         mathstr = '<apply>' + mathstr + ' </apply>'
     return mathstr
 
-def json2CellMLV1_param(json_file, model_name, component_name):
-    """Convert a JSON file to a CellML V1.x model as ET. ElementTree with only parameters
+def variable_attributes_IO(variable_attributes, IO_string):
+    if IO_string == 'pub_in':
+        variable_attributes['public_interface'] = 'in'
+    elif IO_string == 'pub_out':
+        variable_attributes['public_interface'] = 'out'
+    elif IO_string == 'priv_in':
+        variable_attributes['private_interface'] = 'in'
+    elif IO_string == 'priv_out':
+        variable_attributes['private_interface'] = 'out'
+    elif IO_string == '':
+        pass
+    
+
+def create_cellmlV1_rootET(model_name, cellml_prefix=True):
+    """Create a CellML V1.x model as an xml.etree.ElementTree
 
     Parameters
     ----------
-    json_file : str
-        The file path of the JSON file
     model_name : str
         The name of the model
-    component_name : str
-        The name of the component
+    cellml_prefix : bool, optional
+        Whether to include the 'cellml' prefix in the xmlns attribute, by default True
 
     Returns
     -------
-    model : xml.etree.ElementTree
-        The model as an ElementTree    
+    xml.etree.ElementTree with the root model element
+
     """
-
-    comp_dict=load_json(json_file)
-    # Define namespaces with the 'cellml' prefix explicitly included
-    namespaces = {
-        'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace
-        'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
-        'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
-    }
-
-    # register the CellML namespace
-    ET.register_namespace('cellml', namespaces['cellml'])
-
     # Create the root model element without auto-generated prefixes
-    model_attrs = {
-        'name': model_name,
-        'xmlns': namespaces['cellml'],  
-        'xmlns:cellml': namespaces['cellml'],  # Explicitly add the prefix for CellML
-        'xmlns:xlink': namespaces['xlink']  # Explicitly add the prefix for XLink
-    }
-    model = ET.Element('model', model_attrs)
+    if cellml_prefix:
+        model_attrs = {
+            'name': model_name,
+            'xmlns': CellMLV1_namespaces['cellml'],  
+            'xmlns:cellml': CellMLV1_namespaces['cellml'],  # Explicitly add the prefix for CellML
+            'xmlns:xlink': CellMLV1_namespaces['xlink']  # Explicitly add the prefix for XLink
+        }
+    else: # later on, we will add the cellml prefix to the math element
+        model_attrs = {
+            'name': model_name,
+            'xmlns': CellMLV1_namespaces['cellml'],  
+            'xmlns:xlink': CellMLV1_namespaces['xlink']  # Explicitly add the prefix for XLink
+        }
+    
+    return ET.Element('model', model_attrs)
 
-    units_import = ET.SubElement(model, 'import')
-    units_import.set('xlink:href', './units.cellml')  # Set the xlink prefix directly 
+def CellML_param_ET(bg_dict,model_ET):
+    """Add parameters to a CellML V1.x model as ET. ElementTree
+
+    Parameters
+    ----------
+    bg_dict : dict
+        The dictionary of the bond graph model
+    model_ET : xml.etree.ElementTree
+        The model to which the parameters will be added
+
+    Returns
+    -------
+    param_units_Set : set
+        A set of units used in the parameters
+
+    Side effects
+    ------------
+    The model_ET is modified in place
+
+    """
+    # register the CellML namespace    
+    ET.register_namespace('cellml', CellMLV1_namespaces['cellml'])
+    model_name=model_ET.attrib['name']   
     param_units_Set=set()     
     # Add component and param variables
-    component = ET.SubElement(model, 'component', {'name': component_name})
+    component = ET.SubElement(model_ET, 'component', {'name': model_name})
     params_set=set()
-    for comp in comp_dict:
-        for param in comp_dict[comp]['params']:
-            param_units_Set.add(comp_dict[comp]['params'][param]['units'])
-            if comp_dict[comp]['params'][param]['symbol'] not in params_set:
+    for comp in bg_dict:
+        for param in bg_dict[comp]['params']:
+            param_units_Set.add(bg_dict[comp]['params'][param]['units'])
+            if bg_dict[comp]['params'][param]['symbol'] not in params_set: # components may share parameters such as R, T, F
                 variable_attributes = {
-                    'name': comp_dict[comp]['params'][param]['symbol'],
-                    'units': comp_dict[comp]['params'][param]['units']
+                    'name': bg_dict[comp]['params'][param]['symbol'],
+                    'units': bg_dict[comp]['params'][param]['units']
                 }
-                if 'value' in comp_dict[comp]['params'][param]:
-                    variable_attributes['initial_value'] = str(comp_dict[comp]['params'][param]['value'])
-                if 'IO' in comp_dict[comp]['params'][param]:
-                    variable_attributes['public_interface'] = comp_dict[comp]['params'][param]['IO']
+                if 'value' in bg_dict[comp]['params'][param]:
+                    variable_attributes['initial_value'] = str(bg_dict[comp]['params'][param]['value'])
+                if 'IO' in bg_dict[comp]['params'][param]:
+                    IO_string = bg_dict[comp]['params'][param]['IO']
+                    variable_attributes_IO(variable_attributes, IO_string)
                 else:
-                    variable_attributes['public_interface'] = 'out' # default is output
+                    variable_attributes['public_interface']='out' # default is public output                  
                 ET.SubElement(component, 'variable', variable_attributes)
-                params_set.add(comp_dict[comp]['params'][param]['symbol'])
+                params_set.add(bg_dict[comp]['params'][param]['symbol'])
             else:
                 pass
+    return param_units_Set   
 
-    for units_name in param_units_Set:
-        if units_name not in defUnit:
-            units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})  
-
-    return model
-
-def json2CellMLV1_model(json_file, model_name, component_name):
-    """Convert a JSON file to a CellML V1.x model as ET. ElementTree with parameters, 
-       variables, state variables, and mathematical equations
+def CellML_model_run(bg_dict,run_ET,observables):
+    """Add observed variables to a CellML V1.x model as ET. ElementTree
 
     Parameters
     ----------
-    json_file : str
-        The file path of the JSON file
-    model_name : str
-        The name of the model
-    component_name : str
-        The name of the component
+    bg_dict : dict
+        The dictionary of the bond graph model
+    run_ET : xml.etree.ElementTree
+        The model to which the observed variables will be added
+
+    observables : list of tuples of str
+        The list of observed variables, each tuple contains
+          the component name,
+          the 'vars' key of the variable, 
+          and 'IO': pub_in, pub_out, priv_in, priv_out, or none
 
     Returns
     -------
-    model : xml.etree.ElementTree
-        The model as an ElementTree
+    var_units_Set : set
+        A set of units used in the observed variables
+
     """
-    comp_dict=load_json(json_file)
-    # Define namespaces with the 'cellml' prefix explicitly included
-    namespaces = {
-        'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace
-        'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
-        'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
-    }
-
-    # register the CellML namespace
-    ET.register_namespace('cellml', namespaces['cellml'])
-
-    # Create the root model element without auto-generated prefixes
-    model_attrs = {
-        'name': model_name,
-        'xmlns': namespaces['cellml'],  
-        #'xmlns:cellml': namespaces['cellml'],  # Explicitly add the prefix for CellML
-        'xmlns:xlink': namespaces['xlink']  # Explicitly add the prefix for XLink
-    }
-    model = ET.Element('model', model_attrs)
-
-    units_import = ET.SubElement(model, 'import')
-    units_import.set('xlink:href', './units.cellml')  # Set the xlink prefix directly 
-    # Collect all units used in the model and add them to the import
-    units_set = set()    
+    # register the CellML namespace    
+    ET.register_namespace('cellml', CellMLV1_namespaces['cellml'])
+    model_name=run_ET.attrib['name']
     # Add component and variables
-    component = ET.SubElement(model, 'component', {'name': component_name})
+    component = ET.SubElement(run_ET, 'component', {'name': model_name})
+    # Add variables and units
+    units_set = set()
+    for observable in observables:
+        comp=observable[0]
+        var=observable[1]
+        IO_string=observable[2]
+        if var in bg_dict[comp]['vars']:
+            variable_attributes = {'name': bg_dict[comp]['vars'][var]['symbol'],
+                    'units': bg_dict[comp]['vars'][var]['units']}
+            variable_attributes_IO(variable_attributes, IO_string)
+                
+            units_set.add(bg_dict[comp]['vars'][var]['units'])
+            ET.SubElement(component, 'variable', variable_attributes)
+        if var in bg_dict[comp]['params']:
+            variable_attributes = {'name': bg_dict[comp]['params'][var]['symbol'],
+                    'units': bg_dict[comp]['params'][var]['units']}
+            variable_attributes_IO(variable_attributes, IO_string)
+            units_set.add(bg_dict[comp]['params'][var]['units'])
+            ET.SubElement(component, 'variable', variable_attributes)
+    return units_set    
+
+
+def CellML_model_ET(bg_dict,model_ET):
+    """Add model to a CellML V1.x model as ET. ElementTree
+
+    Parameters
+    ----------
+    bg_dict : dict
+        The dictionary of the bond graph model
+    model_ET : xml.etree.ElementTree
+        The model to which the model will be added
+
+    Returns
+    -------
+    var_units_Set : set
+        A set of units used in the model
+
+    Side effects
+    ------------
+    The model_ET is modified in place
+
+    """
+    # register the CellML namespace    
+    ET.register_namespace('cellml', CellMLV1_namespaces['cellml'])
+    model_name=model_ET.attrib['name']
+    # Add component and variables
+    component = ET.SubElement(model_ET, 'component', {'name': model_name})
     # Create the MathML element with the correct namespace
-    mathml_element = ET.Element('math', {'xmlns': namespaces['math']})
+    mathml_element = ET.Element('math', {'xmlns': CellMLV1_namespaces['math']})
     param_set = set()
     var_set = set()
+    units_set = set()
     param_attrs = []
     var_attrs = []
-    for comp in comp_dict:
-        if 'params' not in comp_dict[comp]:
-            comp_dict[comp]['params'] = {}
-        for param in comp_dict[comp]['params']:
-            if comp_dict[comp]['params'][param]['symbol'] not in param_set:
+    for comp in bg_dict:
+        if 'params' not in bg_dict[comp]:
+            bg_dict[comp]['params'] = {}
+        for param in bg_dict[comp]['params']:
+            if bg_dict[comp]['params'][param]['symbol'] not in param_set:
                 variable_attributes = {
-                    'name': comp_dict[comp]['params'][param]['symbol'],
-                    'units': comp_dict[comp]['params'][param]['units']
+                    'name': bg_dict[comp]['params'][param]['symbol'],
+                    'units': bg_dict[comp]['params'][param]['units']
                 }
-                if 'IO' in comp_dict[comp]['params'][param]:
-                    variable_attributes['public_interface'] = comp_dict[comp]['params'][param]['IO']
+                if 'IO' in bg_dict[comp]['params'][param]:
+                    IO_string = bg_dict[comp]['params'][param]['IO']
+                    variable_attributes_IO(variable_attributes, IO_string)
                 else:
-                    variable_attributes['public_interface'] = 'in' # default is input
-                units_set.add(comp_dict[comp]['params'][param]['units'])
+                    variable_attributes['public_interface']='in' # default is public input
+                units_set.add(bg_dict[comp]['params'][param]['units'])
                 param_attrs.append(variable_attributes)
-                param_set.add(comp_dict[comp]['params'][param]['symbol'])
+                param_set.add(bg_dict[comp]['params'][param]['symbol'])
             else:
                 pass
-        if 'vars' not in comp_dict[comp]:
-            comp_dict[comp]['vars'] = {}
-        for var in comp_dict[comp]['vars']:
-            if 'expression' in comp_dict[comp]['vars'][var]:
+        if 'vars' not in bg_dict[comp]:
+            bg_dict[comp]['vars'] = {}
+        for var in bg_dict[comp]['vars']:
+            if 'expression' in bg_dict[comp]['vars'][var]:
                 pass # skip variables that are defined by expressions
             else:
-                if comp_dict[comp]['vars'][var]['symbol'] not in var_set:
-                    var_set.add(comp_dict[comp]['vars'][var]['symbol'])
-                    if 'initial value' in comp_dict[comp]['vars'][var]:
-                        if isinstance(comp_dict[comp]['vars'][var]['initial value'], str):
-                            initial_value_str = comp_dict[comp]['params'][comp_dict[comp]['vars'][var]['initial value']]['symbol']
+                if bg_dict[comp]['vars'][var]['symbol'] not in var_set:
+                    var_set.add(bg_dict[comp]['vars'][var]['symbol'])
+                    if 'initial value' in bg_dict[comp]['vars'][var]:
+                        if isinstance(bg_dict[comp]['vars'][var]['initial value'], str):
+                            initial_value_str = bg_dict[comp]['params'][bg_dict[comp]['vars'][var]['initial value']]['symbol']
                         else:
-                            initial_value_str = str(comp_dict[comp]['vars'][var]['initial value'])
+                            initial_value_str = str(bg_dict[comp]['vars'][var]['initial value'])
                         variable_attributes = {
-                            'name': comp_dict[comp]['vars'][var]['symbol'],
-                            'units': comp_dict[comp]['vars'][var]['units'],
+                            'name': bg_dict[comp]['vars'][var]['symbol'],
+                            'units': bg_dict[comp]['vars'][var]['units'],
                             'initial_value': initial_value_str
                         }
                     else:
                         variable_attributes = {
-                            'name': comp_dict[comp]['vars'][var]['symbol'],
-                            'units': comp_dict[comp]['vars'][var]['units']
+                            'name': bg_dict[comp]['vars'][var]['symbol'],
+                            'units': bg_dict[comp]['vars'][var]['units']
                         }
-                    units_set.add(comp_dict[comp]['vars'][var]['units'])
-                    if 'IO' in comp_dict[comp]['vars'][var]:
-                        variable_attributes['public_interface'] = comp_dict[comp]['vars'][var]['IO']                
+                    units_set.add(bg_dict[comp]['vars'][var]['units'])
+                    if 'IO' in bg_dict[comp]['vars'][var]:
+                        IO_string = bg_dict[comp]['vars'][var]['IO']
+                        variable_attributes_IO(variable_attributes, IO_string)                
                     var_attrs.append(variable_attributes)
-        
-        if 'constitutive_eqs' not in comp_dict[comp]:
-            comp_dict[comp]['constitutive_eqs'] = []
-        for equation in comp_dict[comp]['constitutive_eqs']:
+        if 'constitutive_eqs' not in bg_dict[comp]:
+            bg_dict[comp]['constitutive_eqs'] = []
+        for equation in bg_dict[comp]['constitutive_eqs']:
             mmathml_string = infix_to_mathml(equation[0], equation[1], equation[2])
         # Parse the MathML string
             try:
@@ -216,22 +279,133 @@ def json2CellMLV1_model(json_file, model_name, component_name):
                     mathml_element.append(math_content[0])  # Append the first child, which is the actual content
             except ET.ParseError as e:
                 print(f"Error parsing MathML: {e}")
-    # Add units import
-    for units_name in units_set:
-        if units_name not in defUnit:
-            units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})
-
     # Add parameters
     for param_attr in param_attrs:
         ET.SubElement(component, 'variable', param_attr)
     # Add variables
     for var_attr in var_attrs:
         ET.SubElement(component, 'variable', var_attr)
-
-     # Append the <math> element to the component
+    # Append the <math> element to the component
     component.append(mathml_element)
+    return units_set
 
-    return model
+def units_import(model_ET, units_Set,units_file):
+    """Add units import to a CellML V1.x model as ET. ElementTree
+
+    Parameters
+    ----------
+    model_ET : xml.etree.ElementTree
+        The model to which the units import will be added
+    units_Set : set
+        A set of units to be added
+    units_file : str
+        The file path of the units file
+
+    Returns
+    -------
+    None
+
+    Side effects
+    ------------
+    The model_ET is modified in place
+
+    """
+
+    if len(units_Set) == 0:
+        return
+    units_import = ET.SubElement(model_ET, 'import')
+    units_import.set('xlink:href', units_file)
+    for units_name in units_Set:
+        if units_name not in defUnit:
+            units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})
+
+def CellML_model_param_combine(model_ET,param_ET, run_ET, inforun):
+    """
+    Combine model_ET, param_ET and run_ET to create a CellML V1.x model as ET. ElementTree
+    The mapping based on the name of the variables and also the units of the variables
+
+    Parameters
+    ----------
+    model_ET : xml.etree.ElementTree
+        The model containing the model variables and equations
+    param_ET : xml.etree.ElementTree
+        The parameters model containing the model parameters
+    run_ET : xml.etree.ElementTree
+        The run model containing the observed variables
+    inforun : dict
+        The dictionary of the run model information
+        'component_name': component name of the model,
+        'component_name_new': component name in the new model,
+        'model_file': model file name including the path
+        'params_name': component name of the parameters
+        'params_name_new': component name in the new model
+        'params_file': parameters file name including the path
+
+    Returns
+    -------
+    None  
+
+    """
+    # import the model and parameters
+    model_import = ET.SubElement(run_ET, 'import')
+    model_import.set('xlink:href', inforun['model_file'])
+    component_i = ET.SubElement(model_import, 'component', {'name': inforun['component_name_new'], 'component_ref': inforun['component_name']})
+    # import the parameters
+    params_import = ET.SubElement(run_ET, 'import')
+    params_import.set('xlink:href', inforun['params_file'])
+    component_i = ET.SubElement(params_import, 'component', {'name': inforun['params_name_new'], 'component_ref': inforun['params_name']})
+    
+    # get the pair of variables in the model and parameters which have the same units and name
+    for component in model_ET.findall('component'):
+        if component.attrib['name']==inforun['component_name']:
+            component_element=component
+    for component in param_ET.findall('component'):
+        if component.attrib['name']==inforun['params_name']:
+            param_element=component
+    run_element=run_ET.find('component') # assume that the run model has only one component
+    # get the run_ET subelement component name
+    run_component_name=run_ET.find('component').attrib['name']
+    def map_components(model, component1, component2, component_name1, component_name2):
+        flag_component_pair=False
+        component_pair={'component_1': component_name1, 'component_2': component_name2}
+        for variable_1 in component1.iter('variable'):
+            for variable_2 in component2.iter('variable'):
+                if variable_1.attrib['name']==variable_2.attrib['name'] and variable_1.attrib['units']==variable_2.attrib['units']:
+                    attribute_map_variable={'variable_1': variable_1.attrib['name'], 'variable_2': variable_2.attrib['name']}
+                    flag_variable_pair=False
+                    if 'public_interface'in variable_2.attrib:
+                        if 'public_interface' not in variable_1.attrib:
+                            if variable_2.attrib['public_interface']=='in':
+                                variable_1.attrib['public_interface']='out'
+                            if variable_2.attrib['public_interface']=='out':
+                                variable_1.attrib['public_interface']='in'
+                            if not flag_component_pair:
+                                connection=ET.SubElement(model, 'connection')
+                                map_components=ET.SubElement(connection, 'map_components', component_pair)
+                                flag_component_pair=True
+                            map_variables=ET.SubElement(connection, 'map_variables',attribute_map_variable)
+                            flag_variable_pair=True
+                        if  'public_interface' in variable_1.attrib:
+                            if variable_1.attrib['public_interface']!=variable_2.attrib['public_interface']:
+                                if flag_component_pair:
+                                    for attribute_map_variables in connection.findall('map_variables'):
+                                        if attribute_map_variables==attribute_map_variable:
+                                            flag_variable_pair=True
+                                    if not flag_variable_pair:
+                                        map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
+                                        flag_variable_pair=True
+                                else:
+                                    connection=ET.SubElement(model, 'connection')
+                                    map_components=ET.SubElement(connection, 'map_components', component_pair)
+                                    flag_component_pair=True                                    
+                                    map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
+                                    flag_variable_pair=True
+    # map the variables in the model and run model
+    map_components(run_ET, component_element, run_element, inforun['component_name_new'], run_component_name)
+    # map the variables in the parameters and run model
+    map_components(run_ET, param_element, run_element, inforun['params_name_new'], run_component_name)
+    # map the variables in the model and parameters
+    map_components(run_ET, component_element, param_element, inforun['component_name_new'], inforun['params_name_new'])
 
 def write_cellmlV1 (model,model_file):
     """Write the model to a CellML V1.x file
@@ -248,6 +422,9 @@ def write_cellmlV1 (model,model_file):
     None      
     """
     # Convert to string using ElementTree, then parse with minidom for pretty printing
+    # Ensure model is an Element, not an ElementTree
+    if isinstance(model, ET.ElementTree):
+        model = model.getroot()
     rough_string = ET.tostring(model, 'utf-8')
     reparsed = minidom.parseString(rough_string)
     pretty_string = reparsed.toprettyxml(indent="    ")
@@ -256,13 +433,70 @@ def write_cellmlV1 (model,model_file):
     with open(model_file, 'w') as output_file:
         output_file.write(pretty_string)    
 
+def read_cellmlV1 (model_file):
+    """Read the model from a CellML V1.x file
+    
+    Parameters
+    ----------
+    model_file : str
+        The file path of the CellML file
+
+    Returns
+    -------
+    model : xml.etree.ElementTree
+        The model read from the file
+    """
+
+    # Use the namespace dictionary to parse the CellML file
+    ET.register_namespace('cellml', CellMLV1_namespaces['cellml'])
+    ET.register_namespace('xlink', CellMLV1_namespaces['xlink'])
+    ET.register_namespace('math', CellMLV1_namespaces['math'])    
+   # ET.register_namespace('', CellMLV1_namespaces['cellml'])
+    model = ET.parse(model_file).getroot()
+    # Remove the 'cellml' namespace prefix from element tags
+    def remove_namespace_prefix(element, prefix):
+        if element.tag.startswith(f'{{{CellMLV1_namespaces[prefix]}}}'):
+            element.tag = element.tag.replace(f'{{{CellMLV1_namespaces[prefix]}}}', '')
+        for child in element:
+            remove_namespace_prefix(child, prefix)
+
+    # Update the default namespace in the model and remove the 'cellml' prefix
+    model.attrib['xmlns'] = CellMLV1_namespaces['cellml']
+    remove_namespace_prefix(model, 'cellml')  
+    return model
 
 if __name__ == "__main__": 
 
-    param_model=json2CellMLV1_param('./data/SLC5_BG.json', 'test_model_param', 'param_component')
-    test_model= json2CellMLV1_model('./data/SLC5_BG.json', 'test_model', 'component_test')
-    write_cellmlV1(param_model,'test_model_param.cellml')
-    write_cellmlV1(test_model,'test_model.cellml')
+     # save the bond graph model to a json file
+    file_path='./data/'
+    bg_dict=load_json(file_path+'SLC5_BG.json')
+    implemention={'language':'CellML','version':1.1,
+                    'model_name':'SLC5_BG','model_file':'SLC5_BG.cellml',
+                    'params_model_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
+                    'model_sim':'SLC5_BG_run','sim_file':'SLC5_BG_run.cellml',
+                    'observed_vars': [['r1','f0','pub_in']],}
+    model_dict={'SLC5_BG':{'description': 'SLC5_BG model','implemention': implemention, 'bg_dict': bg_dict}} 
+    
+    observed_vars=[('r1','f_0','pub_in')]
+
+    units_file='./units.cellml'
+    param_ET=create_cellmlV1_rootET('SLC5_BG_param', cellml_prefix=True)
+    model_ET=create_cellmlV1_rootET('SLC5_BG', cellml_prefix=False)
+    run_ET=create_cellmlV1_rootET('SLC5_BG_run', cellml_prefix=True)
+    param_units_Set=CellML_param_ET(bg_dict,param_ET)
+    var_units_Set=CellML_model_ET(bg_dict,model_ET)
+    run_units_Set=CellML_model_run(bg_dict,run_ET,observed_vars)
+    units_import(model_ET, var_units_Set,units_file)
+    units_import(param_ET, param_units_Set,units_file)
+    units_import(run_ET, run_units_Set,units_file)
+    inforun={'component_name': 'SLC5_BG', 'component_name_new': 'SLC5_BG', 'model_file': 'SLC5_BG.cellml',
+             'params_name': 'SLC5_BG_param', 'params_name_new': 'SLC5_BG_param', 'params_file': 'SLC5_BG_param.cellml'}
+    CellML_model_param_combine(model_ET,param_ET, run_ET, inforun)
+    write_cellmlV1(param_ET,file_path+'SLC5_BG_param.cellml')
+    write_cellmlV1(model_ET,file_path+'SLC5_BG.cellml')
+    write_cellmlV1(run_ET,file_path+'SLC5_BG_run.cellml')
+    write_cellmlV1(read_cellmlV1(file_path+'SLC5_BG.cellml'),file_path+'SLC5_BG_test.cellml')
+    
     
   #  to_cellmlV1_params(comp_dict, model_name='params_BG',model_file='params_BG.txt')
   #  to_cellmlV1_models(comp_dict, model_name='GLUT2_BG',model_file='GLUT2_BG.txt',params_file='params_BG.cellml')

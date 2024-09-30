@@ -75,7 +75,7 @@ def load_matrix(matrix):
     
     return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
-def add_BG_components(bg_dict,bg_components_json, matrix, symbol=True):
+def add_BG_components(bg_dict,bg_components_json, matrix, suffix=True):
     """
     Add the components from the stoichiometric matrix to the bond graph model
     The components are defined in BG_components.
@@ -93,11 +93,12 @@ def add_BG_components(bg_dict,bg_components_json, matrix, symbol=True):
     ----------
     bg_dict : dict
         The dictionary of the bond graph model
+        It can be empty or have some components
     bg_components_json : str
-        The file path of the json file of the BG components
+        The file path of the json file of the BG components definition
     matrix : str
         The file path of the stoichiometric matrix
-    symbol : bool, optional
+    suffix : bool, optional
         If True, the symbols of the parameters, variables and state variables are updated with the component name as the suffix
         The default is True.
     
@@ -118,18 +119,20 @@ def add_BG_components(bg_dict,bg_components_json, matrix, symbol=True):
         cID=cIDs[i]
         if cID not in bg_components.keys():
             raise ValueError('The component type is not found in the BG_components')
-        cIndex=cNames[i]# cIndex is the key for the dictionary, make it unique; 
+        cIndex=cNames[i]# cIndex is the key for the bg_dict dictionary, make it unique; 
         if cIndex not in bg_dict.keys(): # only add the component if it is not in the dictionary
             bg_dict[cIndex]=copy.deepcopy(bg_components[cID])
-            # Rename the parameters, variables and state variables with the component name as the suffix if symbol=True
-            if symbol:
-                for param in bg_dict[cIndex]['params'].keys():
-                    if param not in params_common:
-                        bg_dict[cIndex]['params'][param]['symbol']=bg_dict[cIndex]['params'][param]['symbol']+ '_' + cIndex
-                for var in bg_dict[cIndex]['vars'].keys():
-                    bg_dict[cIndex]['vars'][var]['symbol']=bg_dict[cIndex]['vars'][var]['symbol']+ '_' + cIndex 
+            # Rename the parameters, variables and state variables with the component name as the suffix if suffix=True
+            if suffix:
+                if 'params' in bg_dict[cIndex].keys():
+                    for param in bg_dict[cIndex]['params'].keys():
+                        if param not in params_common:
+                            bg_dict[cIndex]['params'][param]['symbol']=bg_dict[cIndex]['params'][param]['symbol']+ '_' + cIndex
+                if 'vars' in bg_dict[cIndex].keys():
+                    for var in bg_dict[cIndex]['vars'].keys():
+                        bg_dict[cIndex]['vars'][var]['symbol']=bg_dict[cIndex]['vars'][var]['symbol']+ '_' + cIndex
         else:
-            pass
+            print('The component {} is already in the dictionary'.format(cIndex))
 
 def add_BG_connections(bg_dict, matrix, direction):
     """
@@ -170,25 +173,25 @@ def add_BG_connections(bg_dict, matrix, direction):
         fIndex=fName[j]
         portF=fPort[j]
         if fIndex not in bg_dict.keys():
-            raise ValueError('The component is not found in the BG dictionary')
+            raise ValueError('The component {} is not found in the BG dictionary'.format(fIndex))
         if portF not in bg_dict[fIndex]['ports'].keys():
-            raise ValueError('The port is not found in the component')
+            raise ValueError('The port {} is not found in the component {}'.format(portF,fIndex))
         for i in range(len(eName)):
             eIndex=eName[i]
             portE = ePort[i]
             if eIndex not in bg_dict.keys():
-                raise ValueError('The component is not found in the BG dictionary')
+                raise ValueError('The component {} is not found in the BG dictionary'.format(eIndex))
             if portE not in bg_dict[eIndex]['ports'].keys():
-                raise ValueError('The port is not found in the component')
+                raise ValueError('The port {} is not found in the component {}'.format(portE,eIndex))
             if N[i,j]!=0:
                 if bg_dict[fIndex]['ports'][portF]['type']=='Power' and bg_dict[eIndex]['ports'][portE]['type']=='Power':
                     bg_dict[fIndex]['ports'][portF]['causality']='e_in'
-                    bg_dict[eIndex]['ports'][portE]['causality']='e_out'
-                if bg_dict[fIndex]['ports'][portF]['type']=='Signal':
-                   bg_dict[fIndex]['ports'][portF]['causality']='s_in'
-                if bg_dict[eIndex]['ports'][portE]['type']=='Signal':
-                   bg_dict[eIndex]['ports'][portE]['causality']='s_out'  # signal from e to f                    
+                    bg_dict[eIndex]['ports'][portE]['causality']='e_out'                   
                 if direction == 'e2f':
+                    if bg_dict[fIndex]['ports'][portF]['type']=='Signal':
+                        bg_dict[fIndex]['ports'][portF]['causality']='s_in'
+                    if bg_dict[eIndex]['ports'][portE]['type']=='Signal':
+                        bg_dict[eIndex]['ports'][portE]['causality']='s_out'
                     if N[i,j]>0:
                         bg_dict[fIndex]['ports'][portF]['in']+=[[eIndex, portE, str(N[i,j])]]
                         bg_dict[eIndex]['ports'][portE]['out']+=[[fIndex, portF, str(N[i,j])]]
@@ -196,7 +199,11 @@ def add_BG_connections(bg_dict, matrix, direction):
                         bg_dict[fIndex]['ports'][portF]['out']+=[[eIndex, portE, str(-N[i,j])]]
                         bg_dict[eIndex]['ports'][portE]['in']+=[[fIndex, portF, str(-N[i,j])]]
                        
-                elif direction == 'f2e':                                                                   
+                elif direction == 'f2e':
+                    if bg_dict[fIndex]['ports'][portF]['type']=='Signal':
+                        bg_dict[fIndex]['ports'][portF]['causality']='s_out'
+                    if bg_dict[eIndex]['ports'][portE]['type']=='Signal':
+                        bg_dict[eIndex]['ports'][portE]['causality']='s_in'                                                                   
                     if N[i,j]>0:
                         bg_dict[fIndex]['ports'][portF]['out']+=[[eIndex, portE, str(N[i,j])]]
                         bg_dict[eIndex]['ports'][portE]['in']+=[[fIndex, portF, str(N[i,j])]]
@@ -233,7 +240,7 @@ def update_BG_eqn(bg_dict,voi):
     Update the constitutive relations of the components
 
     """
-    def sum_bonds(sub_comps):
+    def sum_bonds(sub_comps, causality):
         multiports=0
         for comp in sub_comps:
             cIndex=comp[0]
@@ -246,11 +253,11 @@ def update_BG_eqn(bg_dict,voi):
                     num_stochoimetry=float(stochoimetry)
                 except:
                     raise ValueError('The stochoimetry is not an integer or a float')
-            if bg_dict[cIndex]['ports'][portN]['causality']=='e_out':
+            if bg_dict[cIndex]['ports'][portN]['causality']=='e_out' and causality=='e_in':
                 multiports+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['e_'+portN]['symbol'])   
-            elif bg_dict[cIndex]['ports'][portN]['causality']=='e_in':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='e_in' and causality=='e_out':
                 multiports+=num_stochoimetry*symbols(bg_dict[cIndex]['vars']['f_'+portN]['symbol'])
-            elif bg_dict[cIndex]['ports'][portN]['causality']=='s_out':
+            elif bg_dict[cIndex]['ports'][portN]['causality']=='s_out': 
                 pass
             elif bg_dict[cIndex]['ports'][portN]['causality']=='s_in':
                 pass
@@ -289,18 +296,19 @@ def update_BG_eqn(bg_dict,voi):
         for port in comp['ports']:
             if comp['ports'][port]['type']=='Power':
                 sub_comps_in=comp['ports'][port]['in']
-                bonds_inward=sum_bonds(sub_comps_in)         
+                causality=comp['ports'][port]['causality']
+                bonds_inward=sum_bonds(sub_comps_in,causality)         
                 sub_comps_out=comp['ports'][port]['out']
-                bonds_outward=sum_bonds(sub_comps_out)
+                bonds_outward=sum_bonds(sub_comps_out,causality)
                 if comp['ports'][port]['direction']=='in':
                     inputs_sum=bonds_inward-bonds_outward
                 else:
                     inputs_sum=bonds_outward-bonds_inward
                  # replace the input variables with the real inputs
-                if comp['ports'][port]['causality']=='e_in':
+                if causality=='e_in':
                     comp['vars']['e_'+port]['expression']=ccode(inputs_sum)
                     comp['conservation_eqs']+= [[ comp['vars']['e_'+port]['symbol'],ccode(inputs_sum), '']]
-                elif comp['ports'][port]['causality']=='e_out':
+                elif causality=='e_out':
                     comp['vars']['f_'+port]['expression']=ccode(inputs_sum)
                     comp['conservation_eqs']+= [[ comp['vars']['f_'+port]['symbol'],ccode(inputs_sum), '']]
 
@@ -329,6 +337,8 @@ def update_BG_eqn(bg_dict,voi):
                     else:
                         expr=expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                 comp['constitutive_eqs']+= [[comp['vars'][yvar]['symbol'], ccode(expr),  voi['symbol']]]
+                if 'voi' not in comp['vars'].keys():
+                    comp['vars']['voi']=voi
             else:
                 expr=sympify(str_expr)
                 for port in comp['ports']:
@@ -368,7 +378,7 @@ def update_BG_eqn(bg_dict,voi):
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                         comp['constitutive_eqs']+= [[comp['vars']['s_'+port]['symbol'], ccode(solved_expr), '']]                                  
 
-def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
+def kinetic2BGparams(N_f,N_r,kf,kr,Kc,Nc,Ws):
     """
     Convert kinetic parameters to BG parameters for biochemical reactions
     The method is based on the thesis:
@@ -381,29 +391,21 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
         The forward stoichiometry matrix
     N_r : numpy.ndarray
         The reverse stoichiometry matrix
-    kf : numpy.ndarray
-        The forward rate constants,
-        a column vector with the same number of rows as the number of reactions
-        and the same order as the reactions in N_f  
-    kr : numpy.ndarray
-        The reverse rate constants,
-        a column vector with the same number of rows as the number of reactions
-        and the same order as the reactions in N_r
-    K_c : numpy.ndarray
-        The constraints vector,
-        a column vector
-    N_c : numpy.ndarray
-        The constraints matrix,
-        the columns of N_c is the same as the number of the K_c
-        the rows of N_c is the same as the number of the species
-    Ws : numpy.ndarray
-        The volume vector, the size is the number of species ns       
-
+    kf : 1d list
+        The forward rate constants, the same order as the reactions in N_f  
+    kr : 1d list
+        The reverse rate constants, the same order as the reactions in N_r
+    Kc : 1d list, the constraints, can be empty
+    Nc : 2d list, can be empty, 
+        the length of the Nc is the number of Kc,
+        the length of the Nc[0] is the number of the species
+    Ws : 1d list, the size is the number of species
+           
     Returns
     -------
-    kappa : numpy.ndarray
+    kappa : 1d numpy.ndarray
         The reaction rate constants
-    K : numpy.ndarray
+    K : 1d numpy.ndarray
         The thermodynamic constants
     K_eq : numpy.ndarray
         The equilibrium constants
@@ -413,6 +415,12 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
         The estimated zero values of the detailed balance constraints
 
     """ 
+    k_f=np.array([kf]).transpose()
+    k_r=np.array([kr]).transpose()
+    K_c=np.array([Kc]).transpose()
+    N_c=np.array(Nc).transpose()
+    W_s=np.array([Ws]).transpose()
+    
     N_fT=np.transpose(N_f)
     N_rT=np.transpose(N_r)
     N = N_r - N_f
@@ -422,7 +430,7 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
     N_cT=np.transpose(N_c)
     num_contraints = K_c.shape[0]
     zerofill=np.zeros((num_contraints,num_cols))
-    K_eq = np.divide(kf,kr)
+    K_eq = np.divide(k_f,k_r)
     if len(K_c)!=0:
         M=np.block([
             [I, N_fT],
@@ -430,8 +438,8 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
             [zerofill, N_cT]
         ])
         k= np.block([
-            [kf],
-            [kr],
+            [k_f],
+            [k_r],
             [K_c]
         ]) 
         N_b =np.hstack([-N, N_c])
@@ -445,14 +453,14 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
             [I, N_rT]
         ])
         k= np.block([
-            [kf],
-            [kr]
+            [k_f],
+            [k_r]
         ])
         N_b = -N
         K_contraints = K_eq
     # construct W matrix 
     # the first nr elements are 1 for reactions, the last ns elements are the volume of species
-    W=np.vstack([np.ones((num_cols,1)),Ws]) 
+    W=np.vstack([np.ones((num_cols,1)),W_s]) 
 
     # convert kinetic parameters to BG parameters
     lambdaW= np.exp(np.matmul(np.linalg.pinv(M),np.log(k)))
@@ -463,24 +471,26 @@ def kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws):
     # check if the solution is valid
     N_rref, _ = Matrix(N).rref()
     zero_est = None
-    R_mat = np.array(nsimplify(Matrix(N), rational=True).nullspace())
+    R_mat = np.array(nsimplify(Matrix(-N), rational=True).nullspace())
     if R_mat.size>0:
         R_mat = np.transpose(np.array(R_mat).astype(np.float64))[0]
         zero_est = np.matmul(R_mat.T,K_eq)
     # Check that there is a detailed balance constraint
-    Z = nsimplify(Matrix(N_b), rational=True).nullspace() #rational_nullspace(M, 2)
-    if Z:
-        Z = np.transpose(np.array(Z).astype(np.float64))[0]
-        zero_est = np.matmul(Z.T,np.log(K_contraints))
+    if N_c.size>0:
+        Z = np.array(nsimplify(Matrix(N_c), rational=True).nullspace()) #rational_nullspace(M, 2)
+        if Z.size>0:
+            Z = np.transpose(np.array(Z).astype(np.float64))[0]
+            zero_est = np.matmul(Z.T,np.log(K_c))
 
     k_est = np.exp(np.matmul(M,np.log(lambdaW)))
     diff_ = np.sum(np.abs(np.divide(k_est - k,k)))
 
-    return kappa, K, K_eq, diff_, zero_est
+    return kappa[:,0], K[:,0], K_eq[:,0], diff_, zero_est
 
 def update_BioBG_params(bg_dict, kappa, fName, K, eName):
     """
     Update the BG parameters of biochemitry components in the bg_dict
+    Assume the parameters are kappa and K for the reactions and species components, respectively
     
 
     Parameters
@@ -507,19 +517,19 @@ def update_BioBG_params(bg_dict, kappa, fName, K, eName):
     Update the parameters of the biochemitry components
     """
     for i in range(len(fName)):
-        if abs(kappa[i][0])<1e-2 or abs(kappa[i][0])>1e2:
-            kappa_="{:.3e}".format(kappa[i][0])
+        if abs(kappa[i])<1e-2 or abs(kappa[i])>1e2:
+            kappa_="{:.3e}".format(kappa[i])
         else:
-            kappa_="{:.3f}".format(kappa[i][0])
+            kappa_="{:.3f}".format(kappa[i])
         bg_dict[fName[i]]['params']['kappa']['value']=kappa_
     for i in range(len(eName)):
-        if abs(K[i][0])<1e-2 or abs(K[i][0])>1e2:
-            K_="{:.3e}".format(K[i][0])
+        if abs(K[i])<1e-2 or abs(K[i])>1e2:
+            K_="{:.3e}".format(K[i])
         else:
-            K_="{:.3f}".format(K[i][0])
+            K_="{:.3f}".format(K[i])
         bg_dict[eName[i]]['params']['K']['value']=K_    
 
-def update_BG_params(bg_dict, comp_name, param_val, param_name):
+def update_BG_params(bg_dict, params):
     """
     Update the BG parameters in the bg_dict
 
@@ -527,13 +537,9 @@ def update_BG_params(bg_dict, comp_name, param_val, param_name):
     ----------
     bg_dict : dict
         The dictionary of the bond graph model
-    comp_name : str array
-        The component name
-    param_val : numpy.ndarray
-        The parameter value
-    param_name : str array
-        The parameter name
-
+    params : a list of truple
+        The parameters to update [(comp_name, param_name, param_val)]
+    
     Returns
     -------
     None
@@ -543,19 +549,21 @@ def update_BG_params(bg_dict, comp_name, param_val, param_name):
     Update the parameters of the component
 
     """
-    for i in range(len(comp_name)):
-        bg_dict[comp_name[i]]['params'][param_name[i]]['value']=param_val[i]
+    for i in range(len(params)):
+        bg_dict[params[i][0]]['params'][params[i][1]]['value']=params[i][2]
 
-def write_params_csv(param_val, param_name,csv_file='params_BG.csv'):
+def write_params_csv( param_name,param_val, param_units, csv_file='params_BG.csv'):
     """
     Update the BG parameters in the bg_dict with the parameters
 
     Parameters
     ----------
-    param_val : numpy.ndarray
+    param_val : 1d numpy.ndarray
         The parameter value
     param_name : str array
         The parameter name
+    param_units : str array
+        The parameter units
     csv : str, optional
         The file path of the csv file to save the parameters
         The default is 'params_BG.csv'.
@@ -572,9 +580,9 @@ def write_params_csv(param_val, param_name,csv_file='params_BG.csv'):
     
     with open(csv_file, mode='w') as file:
         writer = csv.writer(file)
-        writer.writerow(['Parameter', 'Value'])
+        writer.writerow(['Parameter', 'Value', 'Units'])
         for i in range(len(param_val)):
-            writer.writerow([param_name[i], param_val[i]])
+            writer.writerow([param_name[i], param_val[i], param_units[i]])
         file.close()
 
 def build_AdjacencyMatrix_(bg_dict):
@@ -860,22 +868,24 @@ if __name__ == "__main__":
     balance2=k_12*k_25*k_56*k_61/(k_21*k_52*k_65*k_16)
     balance3=k_23*k_34*k_45*k_52/(k_32*k_43*k_54*k_25)
     print(balance1,balance2,balance3)
-    kf=np.array([[k_12, k_23, k_34, k_45, k_56, k_61, k_25]]).transpose()
-    kr=np.array([[k_21, k_32, k_43, k_54, k_65, k_16, k_52 ]]).transpose()
-    K_c=np.array([[]]).transpose()
-    N_c=np.array([[]]).transpose()
+
+    kf=[k_12, k_23, k_34, k_45, k_56, k_61, k_25]
+    kr=[k_21, k_32, k_43, k_54, k_65, k_16, k_52 ]
+    K_c=[]
+    N_c=[]
 
     V_E=1
     V_o=8.5e5
     V_i=8.5e5
-    Ws=np.array([[V_i,V_o,V_i,V_o,V_E,V_E,V_E,V_E,V_E,V_E]]).transpose()
+    Ws=[V_i,V_o,V_i,V_o,V_E,V_E,V_E,V_E,V_E,V_E]
     kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
     update_BioBG_params(bg_dict, kappa, fName, K, eName)
     # combine K and kappa to a single array
     param_val=np.concatenate((kappa,K))
     param_name=fName+eName
-    write_params_csv(param_val,param_name,csv_file='params_BG.csv')
-    # save the bond graph model to a json file
+    param_units=['$fmol/s$']*len(fName)+['$fmol^{-1}$']*len(eName)
+    write_params_csv(param_val,param_name,param_units,csv_file=file_path+'params_BG.csv')
+    # save the bond graph model to a json file   
     json_file=file_path+'SLC5_BG.json'    
     save_json(bg_dict, json_file)   
 
