@@ -4,6 +4,7 @@ import libsbml
 from utilities import *
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import copy
 
 defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","farad","gram","gray","henry",
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
@@ -319,6 +320,101 @@ def units_import(model_ET, units_Set,units_file):
         if units_name not in defUnit:
             units_import_i = ET.SubElement(units_import, 'units', {'name': units_name, 'units_ref': units_name})
 
+def import_comp(model_ET, comp_name_new, comp_name, model_file, imported_model):
+    """Add a component import to a CellML V1.x model as ET. ElementTree
+
+    Parameters
+    ----------
+    model_ET : xml.etree.ElementTree or xml.etree.Element
+        The model to which the import will be added
+    comp_name_new : str
+        The component name in the new model
+    comp_name : str
+        The component name of the imported model
+    model_file : str
+        The file path of the imported model
+    imported_model : xml.etree.ElementTree or xml.etree.Element
+        The imported model
+
+    Returns
+    -------
+    None
+
+    Side effects
+    ------------
+    The model_ET is modified in place
+
+    """
+    
+    import_component= None
+    # get the component element from the imported model
+    for component in imported_model.findall('component'):
+        if component.attrib['name']==comp_name:
+            component_element=copy.deepcopy(component)
+            model_import = ET.SubElement(model_ET, 'import')
+            model_import.set('xlink:href', model_file)
+            import_component= ET.SubElement(model_import, 'component', {'name': comp_name_new, 'component_ref': comp_name})
+            return component_element  
+    if import_component is None:
+        print('The component is not found in the imported model')
+        return None
+
+def map_components(model, component1, component2):
+    """Map the variables of two components in a CellML V1.x model as ET. ElementTree
+
+    Parameters
+    ----------
+    model : xml.etree.ElementTree or xml.etree.Element
+        The model to which the mapping will be added
+    component1 : xml.etree.ElementTree or xml.etree.Element
+        The first component to be mapped
+    component2 : xml.etree.ElementTree or xml.etree.Element
+        The second component to be mapped
+    Returns
+    -------
+    None
+
+    Side effects
+    ------------
+    The model_ET is modified in place
+    """
+    flag_component_pair=False
+    component_name1=component1.attrib['name']
+    component_name2=component2.attrib['name']
+    component_pair={'component_1': component_name1, 'component_2': component_name2}
+    for variable_1 in component1.iter('variable'):
+        for variable_2 in component2.iter('variable'):
+            if variable_1.attrib['name']==variable_2.attrib['name'] and variable_1.attrib['units']==variable_2.attrib['units']:
+                attribute_map_variable={'variable_1': variable_1.attrib['name'], 'variable_2': variable_2.attrib['name']}
+                flag_variable_pair=False
+                if 'public_interface'in variable_2.attrib:
+                    if 'public_interface' not in variable_1.attrib:
+                        if variable_2.attrib['public_interface']=='in':
+                            variable_1.attrib['public_interface']='out'
+                        if variable_2.attrib['public_interface']=='out':
+                            variable_1.attrib['public_interface']='in'
+                        if not flag_component_pair:
+                            connection=ET.SubElement(model, 'connection')
+                            map_components=ET.SubElement(connection, 'map_components', component_pair)
+                            flag_component_pair=True
+                        map_variables=ET.SubElement(connection, 'map_variables',attribute_map_variable)
+                        flag_variable_pair=True
+                    if  'public_interface' in variable_1.attrib:
+                        if variable_1.attrib['public_interface']!=variable_2.attrib['public_interface']:
+                            if flag_component_pair:
+                                for attribute_map_variables in connection.findall('map_variables'):
+                                    if attribute_map_variables==attribute_map_variable:
+                                        flag_variable_pair=True
+                                if not flag_variable_pair:
+                                    map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
+                                    flag_variable_pair=True
+                            else:
+                                connection=ET.SubElement(model, 'connection')
+                                map_components=ET.SubElement(connection, 'map_components', component_pair)
+                                flag_component_pair=True                                    
+                                map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
+                                flag_variable_pair=True
+
 def CellML_model_param_combine(model_ET,param_ET, run_ET, inforun):
     """
     Combine model_ET, param_ET and run_ET to create a CellML V1.x model as ET. ElementTree
@@ -346,66 +442,15 @@ def CellML_model_param_combine(model_ET,param_ET, run_ET, inforun):
     None  
 
     """
-    # import the model and parameters
-    model_import = ET.SubElement(run_ET, 'import')
-    model_import.set('xlink:href', inforun['model_file'])
-    component_i = ET.SubElement(model_import, 'component', {'name': inforun['component_name_new'], 'component_ref': inforun['component_name']})
-    # import the parameters
-    params_import = ET.SubElement(run_ET, 'import')
-    params_import.set('xlink:href', inforun['params_file'])
-    component_i = ET.SubElement(params_import, 'component', {'name': inforun['params_name_new'], 'component_ref': inforun['params_name']})
-    
-    # get the pair of variables in the model and parameters which have the same units and name
-    for component in model_ET.findall('component'):
-        if component.attrib['name']==inforun['component_name']:
-            component_element=component
-    for component in param_ET.findall('component'):
-        if component.attrib['name']==inforun['params_name']:
-            param_element=component
-    run_element=run_ET.find('component') # assume that the run model has only one component
-    # get the run_ET subelement component name
-    run_component_name=run_ET.find('component').attrib['name']
-    def map_components(model, component1, component2, component_name1, component_name2):
-        flag_component_pair=False
-        component_pair={'component_1': component_name1, 'component_2': component_name2}
-        for variable_1 in component1.iter('variable'):
-            for variable_2 in component2.iter('variable'):
-                if variable_1.attrib['name']==variable_2.attrib['name'] and variable_1.attrib['units']==variable_2.attrib['units']:
-                    attribute_map_variable={'variable_1': variable_1.attrib['name'], 'variable_2': variable_2.attrib['name']}
-                    flag_variable_pair=False
-                    if 'public_interface'in variable_2.attrib:
-                        if 'public_interface' not in variable_1.attrib:
-                            if variable_2.attrib['public_interface']=='in':
-                                variable_1.attrib['public_interface']='out'
-                            if variable_2.attrib['public_interface']=='out':
-                                variable_1.attrib['public_interface']='in'
-                            if not flag_component_pair:
-                                connection=ET.SubElement(model, 'connection')
-                                map_components=ET.SubElement(connection, 'map_components', component_pair)
-                                flag_component_pair=True
-                            map_variables=ET.SubElement(connection, 'map_variables',attribute_map_variable)
-                            flag_variable_pair=True
-                        if  'public_interface' in variable_1.attrib:
-                            if variable_1.attrib['public_interface']!=variable_2.attrib['public_interface']:
-                                if flag_component_pair:
-                                    for attribute_map_variables in connection.findall('map_variables'):
-                                        if attribute_map_variables==attribute_map_variable:
-                                            flag_variable_pair=True
-                                    if not flag_variable_pair:
-                                        map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
-                                        flag_variable_pair=True
-                                else:
-                                    connection=ET.SubElement(model, 'connection')
-                                    map_components=ET.SubElement(connection, 'map_components', component_pair)
-                                    flag_component_pair=True                                    
-                                    map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
-                                    flag_variable_pair=True
+    component_element = import_comp(run_ET, inforun['component_name_new'], inforun['component_name'], inforun['model_file'],model_ET)
+    param_element= import_comp(run_ET, inforun['params_name_new'], inforun['params_name'], inforun['params_file'],param_ET)    
+    run_element=run_ET.find('component') # assume that the run model has only one component  
     # map the variables in the model and run model
-    map_components(run_ET, component_element, run_element, inforun['component_name_new'], run_component_name)
+    map_components(run_ET, component_element, run_element)
     # map the variables in the parameters and run model
-    map_components(run_ET, param_element, run_element, inforun['params_name_new'], run_component_name)
+    map_components(run_ET, param_element, run_element)
     # map the variables in the model and parameters
-    map_components(run_ET, component_element, param_element, inforun['component_name_new'], inforun['params_name_new'])
+    map_components(run_ET, component_element, param_element)
 
 def write_cellmlV1 (model,model_file):
     """Write the model to a CellML V1.x file
