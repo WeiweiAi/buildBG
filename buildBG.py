@@ -485,7 +485,7 @@ def kinetic2BGparams(N_f,N_r,kf,kr,Kc,Nc,Ws):
     k_est = np.exp(np.matmul(M,np.log(lambdaW)))
     diff_ = np.sum(np.abs(np.divide(k_est - k,k)))
 
-    return kappa[:,0], K[:,0], K_eq[:,0], diff_, zero_est
+    return kappa[:,0], K[:,0], K_eq[:,0], diff_, zero_est,k_est
 
 def update_BioBG_params(bg_dict, kappa, fName, K, eName):
     """
@@ -538,7 +538,7 @@ def update_BG_params(bg_dict, params):
     bg_dict : dict
         The dictionary of the bond graph model
     params : a list of truple
-        The parameters to update [(comp_name, param_name, param_val)]
+        The parameters to update [(comp_name, param_name, param_val)] or [(param_name, param_val)]
     
     Returns
     -------
@@ -549,8 +549,29 @@ def update_BG_params(bg_dict, params):
     Update the parameters of the component
 
     """
+
     for i in range(len(params)):
-        bg_dict[params[i][0]]['params'][params[i][1]]['value']=params[i][2]
+        param=params[i]
+        comp_name=None
+        if len(param)==2:
+            param_name=param[0]
+            param_val=param[1]
+        elif len(param)==3:
+            param_name=param[1]
+            param_val=param[2]
+            comp_name=param[0]
+        else:
+            raise ValueError('The parameter format is not correct')
+        if comp_name is None:
+            for key, comp in bg_dict.items():
+                if 'params' in comp.keys():
+                    if param_name in comp['params'].keys():
+                        bg_dict[key]['params'][param_name]['value']=param_val
+        else:
+            if comp_name not in bg_dict.keys():
+                raise ValueError('The component {} is not found in the BG dictionary'.format(comp_name))
+            if 'params' in bg_dict[comp_name].keys():
+                bg_dict[comp_name]['params'][param_name]['value']=param_val
 
 def write_params_csv( param_name,param_val, param_units, csv_file='params_BG.csv'):
     """
@@ -878,8 +899,10 @@ if __name__ == "__main__":
     V_o=8.5e5
     V_i=8.5e5
     Ws=[V_i,V_o,V_i,V_o,V_E,V_E,V_E,V_E,V_E,V_E]
-    kappa, K, K_eq, diff_,  zero_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
+    kappa, K, K_eq, diff_,  zero_est,k_est= kinetic2BGparams(N_f,N_r,kf,kr,K_c,N_c,Ws)
+    print(diff_,zero_est,K_eq,k_est)
     update_BioBG_params(bg_dict, kappa, fName, K, eName)
+    update_BG_params(bg_dict,[('T',310)])
     # combine K and kappa to a single array
     param_val=np.concatenate((kappa,K))
     param_name=fName+eName

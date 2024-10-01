@@ -176,7 +176,10 @@ def CellML_model_run(bg_dict,run_ET,observables):
         if var in bg_dict[comp]['vars']:
             variable_attributes = {'name': bg_dict[comp]['vars'][var]['symbol'],
                     'units': bg_dict[comp]['vars'][var]['units']}
-            variable_attributes_IO(variable_attributes, IO_string)
+            if var=='voi':
+                variable_attributes['public_interface']='in'
+            else:
+                variable_attributes_IO(variable_attributes, IO_string)
                 
             units_set.add(bg_dict[comp]['vars'][var]['units'])
             ET.SubElement(component, 'variable', variable_attributes)
@@ -362,6 +365,9 @@ def import_comp(model_ET, comp_name_new, comp_name, model_file, imported_model):
 def map_components(model, component1, component2):
     """Map the variables of two components in a CellML V1.x model as ET. ElementTree
 
+       The mapping is based on the name of the variables and also the units of the variables
+       Component2 dominates the public_interface of the variables if the public_interface is not defined in component1
+
     Parameters
     ----------
     model : xml.etree.ElementTree or xml.etree.Element
@@ -399,7 +405,7 @@ def map_components(model, component1, component2):
                             flag_component_pair=True
                         map_variables=ET.SubElement(connection, 'map_variables',attribute_map_variable)
                         flag_variable_pair=True
-                    if  'public_interface' in variable_1.attrib:
+                    else:
                         if variable_1.attrib['public_interface']!=variable_2.attrib['public_interface']:
                             if flag_component_pair:
                                 for attribute_map_variables in connection.findall('map_variables'):
@@ -414,6 +420,10 @@ def map_components(model, component1, component2):
                                 flag_component_pair=True                                    
                                 map_variables=ET.SubElement(connection, 'map_variables', attribute_map_variable)
                                 flag_variable_pair=True
+                        else:
+                            print('The public_interface of {} is the same in both components'.format(variable_2.attrib['name']))
+                else:
+                    print('The public_interface of {} is not defined'.format(variable_2.attrib['name']))
 
 def CellML_model_param_combine(model_ET,param_ET, run_ET, inforun):
     """
