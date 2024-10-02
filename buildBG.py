@@ -907,7 +907,7 @@ if __name__ == "__main__":
     param_val=np.concatenate((kappa,K))
     param_name=fName+eName
     param_units=['$fmol/s$']*len(fName)+['$fmol^{-1}$']*len(eName)
-    write_params_csv(param_val,param_name,param_units,csv_file=file_path+'params_BG.csv')
+    write_params_csv(param_name,param_val,param_units,csv_file=file_path+'params_BG.csv')
     # save the bond graph model to a json file   
     json_file=file_path+'SLC5_BG.json'    
     save_json(bg_dict, json_file)   
