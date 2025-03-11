@@ -8,8 +8,8 @@ from sympy import *
 
 def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
     """
-    This function is used to build the bond graph using networkx based on stoichiometry-like matrix
-    Note: The 0 or 1 junctions may not be added to the bond graph, which can be added by nxBG_addJunction function
+    This function is used to build the bond graph using networkx based on stoichiometric matrix
+    Note: The 0 or 1 junctions may not be added to the bond graph, which can be added by nxBG_addJunction function later
     
     Parameters
     ----------
@@ -32,33 +32,27 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
     eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
     if direction=='f2e':
         N=-N
-    cName=eName+fName
-    cPort=ePort+fPort
-    cID=eID+fID
+    cName=eName+fName # component name, should be unique for the graph
+    cPort=ePort+fPort # port name, unique for each component
+    cID=eID+fID # can be used to specify the component type, such as resistor, capacitor, etc. '1' and '0' are used for the junctions
     for i in range(len(cName)):
         if cName[i] not in G.nodes:
             if cID[i]=='1': # BondGraph Junction
                 G.add_node(cName[i], a='JunctionStructure', subClass='OneJunctionStructure')
             elif cID[i]=='0': # BondGraph Junction
                 G.add_node(cName[i], a='JunctionStructure', subClass='ZeroJunctionStructure')
+            elif cID[i]=='TF': # BondGraph Transformer
+                G.add_node(cName[i], a='JunctionStructure', subClass='Transformer')
+            elif cID[i]=='GY': # BondGraph Gyrator
+                G.add_node(cName[i], a='JunctionStructure', subClass='Gyrator')
             else: # BondGraph Element
-                G.add_node(cName[i], a='BondElement')
+                G.add_node(cName[i], a='BondElement',component=cID[i])
         iport=f'{cName[i]}_{cPort[i]}'
         if connection=='PowerBond':
             if i<len(eName):
-                if cID[i]=='in':
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort-out', positive='in')
-                elif cID[i]=='out':
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort-out', positive='out')
-                else:
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort-out', positive='unknown')
+                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort', orientation='in')
             if i>=len(eName):
-                if cID[i]=='in':
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow-out', positive='in')
-                elif cID[i]=='out':
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow-out', positive='out')
-                else:
-                    G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow-out', positive='unknown')
+                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow', orientation='in')
             
             G.add_edge(cName[i],iport, relationship='hasPowerPort')
         elif connection=='SignalBond':
@@ -66,6 +60,7 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             G.add_edge(cName[i],iport, relationship='hasSignalPort')
         else:
             raise ValueError('The connection type is not correct')
+        
     for i in range(len(eName)):
         for j in range(len(fName)):
             iport=f'{eName[i]}_{ePort[i]}'
@@ -106,44 +101,43 @@ def nxBG_addJunction(G):
                 jport=f'{jName}_{jPort}'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality=G.nodes[node]['causality'])
                 G.add_edge(jName,jport, relationship='hasPowerPort')
-                G.add_edge(jport,edge[1], weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=G.edges[edge]['effort'], flow=G.edges[edge]['flow'])
+                G.add_edge(jport,edge[1], weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=None, flow=None)
                 G.remove_edge(edge[0],edge[1])
             for edge in in_edges:
                 jPort+=1
                 jport=f'{jName}_{jPort}'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality=G.nodes[node]['causality'])
                 G.add_edge(jName,jport, relationship='hasPowerPort')
-                G.add_edge(edge[0],jport, weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=G.edges[edge]['effort'], flow=G.edges[edge]['flow'])
+                G.add_edge(edge[0],jport, weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=None, flow=None)
                 G.remove_edge(edge[0],edge[1]) 
             jPort=0
             jport=f'{jName}_{jPort}'
-            if G.nodes[node]['causality']=='effort-out':
+            if G.nodes[node]['causality']=='effort':
                 G.nodes[jName]['subClass']='ZeroJunctionStructure'
-                G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='flow-out')
-                if G.nodes[node]['positive']=='in':
+                G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='flow')
+                if G.nodes[node]['orientation']=='in':
                     G.add_edge(jport,node, weight='1', a='PowerBond', effort=None, flow=None)
-                elif G.nodes[node]['positive']=='out':
+                elif G.nodes[node]['orientation']=='out':
                     G.add_edge(node,jport, weight='1', a='PowerBond', effort=None, flow=None)
                 else:
                     raise ValueError('The positive flow direction is unknown')
                 
-            elif G.nodes[node]['causality']=='flow-out':
+            elif G.nodes[node]['causality']=='flow':
                 G.nodes[jName]['subClass']='OneJunctionStructure'
-                G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='effort-out')
-                if G.nodes[node]['positive']=='in':
+                G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='effort')
+                if G.nodes[node]['orientation']=='in':
                     G.add_edge(jport,node,weight='1', a='PowerBond', effort=None, flow=None)
-                elif G.nodes[node]['positive']=='out':
+                elif G.nodes[node]['orientation']=='out':
                     G.add_edge(node,jport, weight='1', a='PowerBond', effort=None, flow=None)
                 else:
                     raise ValueError('The positive flow direction is unknown')
             else:
-                raise ValueError('The causality is not correct')      
+                raise ValueError('The causality is not correct.')      
             G.add_edge(jName,jport, relationship='hasPowerPort')
 
 def nxBG_addJunction_multi(G):
     """
     This function is used to replace the PowerBond with the Transformer in case the PowerBond has the weight not equal to 1
-    Note: The Transformer is a subclass of the BondElement, which is different from https://celldl.org/ontologies/bondgraph#MultiplierJunctionStructure
 
     Parameters
     ----------
@@ -162,18 +156,20 @@ def nxBG_addJunction_multi(G):
         source=edge[0]
         target=edge[1]
         TFName='TF_'+source+'_'+target
-        G.add_node(TFName, a='BondElement', subClass='Transformer', modelParameter={'param_1':{'value':float(G.edges[edge]['weight'])}})
+        G.add_node(TFName, a='JunctionStructure', subClass='Transformer', modelParameter={'param_1':
+                                                                                    {'propertyValue':float(G.edges[edge]['weight']), 'units':'dimensionless',
+                                                                                     'propertyName':TFName}})
         # add the power ports of the transformer
         port_0=f'{TFName}_0'
         port_1=f'{TFName}_1'
-        G.add_node(port_0, a='PowerPort', isPortOf=G.nodes[TFName]['a'], effort=None, flow=None, causality='flow-out', positive='in')
+        G.add_node(port_0, a='PowerPort', isPortOf=G.nodes[TFName]['a'], effort=None, flow=None, causality='flow')
         G.add_edge(TFName,port_0, relationship='hasPowerPort')
-        G.add_node(port_1, a='PowerPort', isPortOf=G.nodes[TFName]['a'], effort=None, flow=None, causality='effort-out', positive='out')
+        G.add_node(port_1, a='PowerPort', isPortOf=G.nodes[TFName]['a'], effort=None, flow=None, causality='effort')
         G.add_edge(TFName,port_1, relationship='hasPowerPort')
-        if G.nodes[source]['causality']=='effort-out':
+        if G.nodes[source]['causality']=='effort':
             G.add_edge(source,port_0, weight='1', a='PowerBond', effort=None, flow=None)
             G.add_edge(port_1,target, weight='1', a='PowerBond', effort=None, flow=None)
-        elif G.nodes[source]['causality']=='flow-out':
+        elif G.nodes[source]['causality']=='flow':
             G.add_edge(source,port_1, weight='1', a='PowerBond',  effort=None, flow=None)
             G.add_edge(port_0,target, weight='1', a='PowerBond',  effort=None, flow=None)
         else:
@@ -188,126 +184,266 @@ def nxBG_initEnergy(G):
     """
     for node in G.nodes:
         if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement':
-            if G.nodes[node]['causality']=='effort-out' and G.nodes[node]['effort'] is None:
-                G.nodes[node]['effort']='e_'+ node
-            if G.nodes[node]['causality']=='flow-out' and G.nodes[node]['flow'] is None:
-                G.nodes[node]['flow']='f_'+ node
+            if G.nodes[node]['causality']=='effort' and G.nodes[node]['effort'] is None:
+                G.nodes[node]['effort']={}
+                G.nodes[node]['effort']['propertyName']='e_'+ node
+            if G.nodes[node]['causality']=='flow' and G.nodes[node]['flow'] is None:
+                G.nodes[node]['flow']={}
+                G.nodes[node]['flow']['propertyName']='f_'+ node
 
-def PowerPort2PowerBond(G,port):
+def viaPowerbond(G,edge):
     """
-    This function is used to propagate the effort and flow from the power port to the power bond    
-    """
-    power_bonds=[]
-    if G.nodes[port]['a']=='PowerPort':
-        power_bonds+=[(u, v) for u, v, data in G.out_edges(port,data=True) if data.get('a') == 'PowerBond']
-        power_bonds+=[(u, v) for u, v, data in G.in_edges(port,data=True) if data.get('a') == 'PowerBond']
-        for power_bond in power_bonds:
-            if G.nodes[port]['effort'] is not None:
-                G.edges[power_bond]['effort']=G.nodes[port]['effort']
-            if G.nodes[port]['flow'] is not None:
-                G.edges[power_bond]['flow']=G.nodes[port]['flow']
+    This function is used to propagate the energy through the PowerBond
+    
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    edge : tuple
+        The edge of the PowerBond
 
-def PowerBond2PowerPort(G,edge):
-    """
-    This function is used to propagate the effort and flow from the power bond to the power port
-    """
-    if 'a' in G.edges[edge].keys() and G.edges[edge]['a'] == 'PowerBond':
-       source=edge[0]
-       target=edge[1]
-       if G.nodes[source]['effort'] is None and G.edges[edge]['effort'] is not None:
-            G.nodes[source]['effort']=G.edges[edge]['effort']
-       if G.nodes[source]['flow'] is None and G.edges[edge]['flow'] is not None:
-            G.nodes[source]['flow']=G.edges[edge]['flow']
-       if G.nodes[target]['effort'] is None and G.edges[edge]['effort'] is not None:
-            G.nodes[target]['effort']=G.edges[edge]['effort']
-       if G.nodes[target]['flow'] is None and G.edges[edge]['flow'] is not None:
-            G.nodes[target]['flow']=G.edges[edge]['flow']
+    Returns
+    -------
+    Boolean
+        True if the energy is propagated through the PowerBond, otherwise False
 
-def _checkJunction_sharedVar(G,nodeJunction):
-    """
-    This function is used to check the shared variable of the junction
+    side effects
+    ------------
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the PowerBond
 
-    parameters
+    Raises
+    ------
+    ValueError
+        If the causality of the PowerPort is not correct
+        If the expression of the PowerPort is not consistent with the PowerBond
+    
+    """    
+    source=edge[0]
+    target=edge[1]
+    source_var_out=G.nodes[source]['causality']
+    target_var_out=G.nodes[target]['causality']
+    if source_var_out==target_var_out:
+        raise ValueError('The causality is not correct')
+    else:
+        if G.nodes[source][source_var_out] is not None:
+            if G.edges[edge][source_var_out] is None:
+                G.edges[edge][source_var_out]={}
+            if 'propertyName' in G.nodes[source][source_var_out].keys(): 
+                if 'expression' in G.edges[edge][source_var_out].keys():
+                    if symbols(G.nodes[source][source_var_out]['propertyName'])!=G.edges[edge][source_var_out]['expression']:
+                        raise ValueError(f'The {source_var_out} of the port {source} is not consistent with the PowerBond')
+                else:                   
+                    G.edges[edge][source_var_out]['expression']=symbols(G.nodes[source][source_var_out]['propertyName'])
+            elif 'expression' in G.nodes[source][source_var_out].keys():
+                if 'expression' in G.edges[edge][source_var_out].keys():
+                    if G.nodes[source][source_var_out]['expression']!=G.edges[edge][source_var_out]['expression']:
+                        raise ValueError(f'The {source_var_out} of the port {source} is not consistent with the PowerBond')
+                else:
+                    G.edges[edge][source_var_out]['expression']=G.nodes[source][source_var_out]['expression']
+            else:
+                raise ValueError(f'The {source_var_out} of the port {source} is unknown.')
+            if G.nodes[target][source_var_out] is None: 
+                G.nodes[target][source_var_out]={}
+            if 'expression' in G.nodes[target][source_var_out].keys():
+                if G.nodes[target][source_var_out]['expression']!=G.edges[edge][source_var_out]['expression']:
+                    raise ValueError(f'The {source_var_out} of the port {target} is not consistent with the PowerBond')
+            else:
+                G.nodes[target][source_var_out]['expression']=G.edges[edge][source_var_out]['expression']       
+        if G.nodes[target][target_var_out] is not None:
+            if G.edges[edge][target_var_out] is None:
+                G.edges[edge][target_var_out]={}
+            if 'propertyName' in G.nodes[target][target_var_out].keys():
+                if 'expression' in G.edges[edge][target_var_out].keys():
+                    if symbols(G.nodes[target][target_var_out]['propertyName'])!=G.edges[edge][target_var_out]['expression']:
+                        raise ValueError(f'The {target_var_out} of the port {target} is not consistent with the PowerBond')
+                else:                    
+                    G.edges[edge][target_var_out]['expression']=symbols(G.nodes[target][target_var_out]['propertyName'])
+            elif 'expression' in G.nodes[target][target_var_out].keys():
+                if 'expression' in G.edges[edge][target_var_out].keys():
+                    if G.nodes[target][target_var_out]['expression']!=G.edges[edge][target_var_out]['expression']:
+                        raise ValueError(f'The {target_var_out} of the port {target} is not consistent with the PowerBond')
+                else:
+                    G.edges[edge][target_var_out]['expression']=G.nodes[target][target_var_out]['expression']
+            else:
+                raise ValueError(f'The {target_var_out} of the port {target} is unknown.')
+            if G.nodes[source][target_var_out] is None:
+                G.nodes[source][target_var_out]={}
+            if 'expression' in G.nodes[source][target_var_out].keys():
+                if G.nodes[source][target_var_out]['expression']!=G.edges[edge][target_var_out]['expression']:
+                    raise ValueError(f'The {target_var_out} of the port {source} is not consistent with the PowerBond')
+            else:
+                G.nodes[source][target_var_out]['expression']=G.edges[edge][target_var_out]['expression']
+
+    if G.nodes[source][source_var_out] is None and G.nodes[target][target_var_out] is None:
+        return False
+    else:
+        return True
+
+def getPowerPorts(G,bondElement):
+    """
+    This function is used to get the power ports of the bond element
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    bondElement : str
+        The name of the bond element
+
+    Returns
+    -------
+    ports : list
+        The list of the power ports of the bond element
+    """
+    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasPowerPort'] # get the power ports of the bond element
+    return ports
+
+def getSignalPorts(G,bondElement):
+    """
+    This function is used to get the signal ports of the bond element
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    bondElement : str
+        The name of the bond element
+
+    Returns
+    -------
+    ports : list
+        The list of the signal ports of the bond element
+    """
+    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasSignalPort'] # get the signal ports of the bond element
+    return ports
+
+def viaJunction(G,nodeJunction):
+    """
+    This function is used to propagate the energy through the 0 or 1 Junction
+
+    Parameters
     ----------
     G : nx.DiGraph
         The bond graph built using networkx
         Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
         Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
     nodeJunction : str
-        The name of the junction node
-
-    Returns
-    -------
-    shared : str
-        The shared variable of the junction
-    shared_var : str
-        The shared variable type, either effort or flow
-    solved : bool
-        The flag to indicate if the shared variable is solved
-        i.e., all the power ports of the junction have the same shared variable
-    ports : list
-        The list of the power ports of the junction
-
+        The name of the junction
     """
+    ports=getPowerPorts(G,nodeJunction) # get the power ports of the junction
     if G.nodes[nodeJunction]['subClass']=='ZeroJunctionStructure':
-        shared_var='effort'
+        shared_var_type='effort' # one effort in, multiple effort out
+        compute_var_type='flow' # multiple flow in, one flow out
     elif G.nodes[nodeJunction]['subClass']=='OneJunctionStructure':
-        shared_var='flow'
-    ports=[out_edge[1] for out_edge in G.out_edges(nodeJunction) if 'relationship' in G.edges[out_edge]] # get the power ports of the junction
-    shared=None
-    nports_known=0
-    for port in ports:
-        if G.nodes[port][shared_var] is not None:
-            shared=G.nodes[port][shared_var] # get the shared variable
-            nports_known+=1
-    if nports_known==len(ports):
-        PowerPort2PowerBond(G,port) # may not be necessary
-        solved=True
+        shared_var_type='flow' # one flow in, multiple flow out
+        compute_var_type='effort' # multiple effort in, one effort out  
     else:
-        solved=False
-    return shared, shared_var, solved,ports
-
-def _updateJunction_sharedVar(G,nodeJunction):
-    """
-    This function is used to:
-      update the shared variable of the ports of the junction;
-      update the shared variable of the power bond connected to the junction;
-      update the shared variable of the power port of the other side of the power bond;
-      propagate the shared variable to the other junctions connected to the junction
-
-      Note: This function is critical and needs to be tested carefully
-    """
-
-    shared, shared_var, solved,ports=_checkJunction_sharedVar(G,nodeJunction)
-    if (shared is not None) and (not solved):
-        for port in ports:
-            G.nodes[port][shared_var]=shared # update the shared variable for the power ports
-            edges=[(u, v) for u, v, data in G.out_edges(port,data=True) if data.get('a') == 'PowerBond']
-            if len(edges)==1:
-                port_v=edges[0][1]
+        raise ValueError('The subclass is not correct') 
+    
+    for port in ports:
+        if G.nodes[port][shared_var_type] is not None and G.nodes[port]['causality']==compute_var_type: # input to the junction
+            if 'expression' in G.nodes[port][shared_var_type].keys():
+                shared_var=G.nodes[port][shared_var_type]['expression']
+                compute_direction=checkBondDirection(G,port)
+                compute_port=port                                    
+                break
             else:
-                edges+=[(u, v) for u, v, data in G.in_edges(port,data=True) if data.get('a') == 'PowerBond']
-                if len(edges)==1:
-                    port_v=edges[0][0]
-            if len(edges)==1:
-                G.edges[edges[0]][shared_var]=shared # update the shared variable for the power bond
-                G.nodes[port_v][shared_var]=shared # update the shared variable for the power port of the other side of the power bond
-                for u, v, data in G.in_edges(port_v,data=True) :
-                    if data.get('relationship') == 'hasPowerPort':
-                        node_v=u
-                        if G.nodes[node_v]['a']=='JunctionStructure':
-                            _updateJunction_sharedVar(G,node_v)
-                            break              
+               raise ValueError(f'The {shared_var_type} of the port {port} is unknown.')
+        elif G.nodes[port][shared_var_type] is None and G.nodes[port]['causality']==compute_var_type: # input to the junction not solved
+            return False
+        
+    compute_var_init=0
+    known_compute_var=0
+    for  port in ports:
+        if G.nodes[port]['causality']==shared_var_type:
+            if G.nodes[port][shared_var_type] is None:
+                G.nodes[port][shared_var_type]={}
+            if 'expression' in G.nodes[port][shared_var_type].keys():
+                if G.nodes[port][shared_var_type]['expression']!=shared_var:
+                    raise ValueError(f'The {shared_var_type} of the port {port} is not consistent with the junction')    
             else:
-                raise ValueError('The number of edges is not correct')
+                G.nodes[port][shared_var_type]['expression']=shared_var
+            # get the powerbond of the port and propagate the energy
+            powerBonds= [u for u in G.out_edges(port) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+            viaPowerbond(G,powerBonds[0])
+            if G.nodes[port][compute_var_type] is not None:
+                if 'expression' in G.nodes[port][compute_var_type].keys():
+                    known_compute_var+=1
+                    if checkBondDirection(G,port)==compute_direction: 
+                        compute_var_init-=G.nodes[port][compute_var_type]['expression']
+                    else:
+                        compute_var_init+=G.nodes[port][compute_var_type]['expression']
+                else:
+                    raise ValueError(f'The {compute_var_type} of the port {port} is unknown.')
+    
+    if known_compute_var==len(ports)-1:
+        if G.nodes[compute_port][compute_var_type] is None:
+            G.nodes[compute_port][compute_var_type]={}
+        if 'expression' in G.nodes[compute_port][compute_var_type].keys():
+            if G.nodes[compute_port][compute_var_type]['expression']!=compute_var_init:
+                raise ValueError(f'The {compute_var_type} of the port {compute_port} is not consistent with the junction')
+        else:
+            G.nodes[compute_port][compute_var_type]['expression']=compute_var_init
+        powerBonds= [u for u in G.out_edges(compute_port) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(compute_port) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+        viaPowerbond(G,powerBonds[0])
         return True
     else:
         return False
 
-def updateJunction_sharedVar(G):        
-    junctions=[node for node in G.nodes if G.nodes[node]['a']=='JunctionStructure']
-    for nodeJunction in junctions:
-        _updateJunction_sharedVar(G,nodeJunction)
+def viaTransformer(G,TF):
+    """
+    This function is used to propagate the energy through the Transformer
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    TF : str
+        The name of the Transformer
+
+    Returns
+    -------
+    None
+
+    side effects
+    ------------
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Transformer
+    
+    """
+
+    ports=getPowerPorts(G,TF)
+    port_0=ports[0]
+    port_1=ports[1]
+    direction_0=checkBondDirection(G,port_0)
+    direction_1=checkBondDirection(G,port_1)
+    if direction_0!=direction_1:
+        if G.nodes[port_0][G.nodes[port_0]['causality']] is None and G.nodes[port_1][G.nodes[port_0]['causality']] is not None:
+            G.nodes[port_0][G.nodes[port_0]['causality']]={}
+            G.nodes[port_0][G.nodes[port_0]['causality']]['expression']=G.nodes[port_1][G.nodes[port_0]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+        if G.nodes[port_1][G.nodes[port_1]['causality']] is None and G.nodes[port_0][G.nodes[port_1]['causality']] is not None:
+            G.nodes[port_1][G.nodes[port_1]['causality']]={}
+            G.nodes[port_1][G.nodes[port_1]['causality']]['expression']=G.nodes[port_0][G.nodes[port_1]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+    else:
+        if G.nodes[port_0][G.nodes[port_0]['causality']] is None and G.nodes[port_1][G.nodes[port_0]['causality']] is not None:
+            G.nodes[port_0][G.nodes[port_0]['causality']]={}
+            G.nodes[port_0][G.nodes[port_0]['causality']]['expression']=-G.nodes[port_1][G.nodes[port_0]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+        if G.nodes[port_1][G.nodes[port_1]['causality']] is None and G.nodes[port_0][G.nodes[port_1]['causality']] is not None:
+            G.nodes[port_1][G.nodes[port_1]['causality']]={}
+            G.nodes[port_1][G.nodes[port_1]['causality']]['expression']=-G.nodes[port_0][G.nodes[port_1]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+    
+    powerBonds= [u for u in G.out_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+    viaPowerbond(G,powerBonds[0])
+    powerBonds= [u for u in G.out_edges(port_1) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port_1) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+    viaPowerbond(G,powerBonds[0])
+    return True
 
 def checkBondDirection(G,port):
     if any(data.get('a') == 'PowerBond' for u, v, data in G.out_edges(port,data=True)):
@@ -316,80 +452,7 @@ def checkBondDirection(G,port):
         direction='in'
     else:
         raise ValueError('The direction is not correct')
-    return direction
-
-def updateJunction_conservation(G):
-    """
-    This function is used to:
-      update the effort or flow of the power port of the junction based on the conservation law
-      propagate the effort or flow to the power bond connected to the junction
-
-    """
-
-    junctions=[node for node in G.nodes if G.nodes[node]['a']=='JunctionStructure']
-    for nodeJunction in junctions:
-        shared, shared_var, solved,ports=_checkJunction_sharedVar(G,nodeJunction)
-        if shared_var=='effort':
-            compute_var='flow'
-        elif shared_var=='flow':
-            compute_var='effort'
-        else:
-            raise ValueError('The shared variable is not correct')
-        compute_var_init=0
-        for port in ports:
-            if G.nodes[port][compute_var] is None:
-                compute_port=port
-                compute_direction=checkBondDirection(G,port)
-                break
-        for port in ports:
-            if G.nodes[port][compute_var] is not None:
-                if checkBondDirection(G,port)==compute_direction:
-                    compute_var_init-=symbols(G.nodes[port][compute_var])
-                else:
-                    compute_var_init+=symbols(G.nodes[port][compute_var])
-        G.nodes[compute_port][compute_var]=ccode(compute_var_init)
-        PowerPort2PowerBond(G,compute_port)
-        edges=[(u, v) for u, v, data in G.out_edges(compute_port,data=True) if data.get('a') == 'PowerBond']
-        edges+=[(u, v) for u, v, data in G.in_edges(compute_port,data=True) if data.get('a') == 'PowerBond']
-        for edge in edges:
-            PowerBond2PowerPort(G,edge)           
-
-def nxBG_refine_subclass(G):
-    """
-    This function is used to specify the subclass of the BondElement based on the user input
-    
-    """
-    BondElement_subclasses = ['Dissipative', 'Storage', 'Source', 'Unknown','Transformer','Gyrator']
-    # print the subclass with the numberings
-    for idx, subclass in enumerate(BondElement_subclasses, start=1):
-        print(f"{idx}. {subclass}")
-    for node in G.nodes:
-        if G.nodes[node]['a']=='BondElement' and 'subClass' not in G.nodes[node].keys():
-            print(f"Refining node: {node}")
-            print("Select a subclass:")
-            subclass = input()
-            G.nodes[node]['subClass'] = BondElement_subclasses[int(subclass)-1]
-
-def prelink_nxBG_CellML(G):
-    """
-    This function is used to specify the number of modelParameter and stateVariable and add them to the BondElement based on the user input
-    """
-    for node in G.nodes:
-        if G.nodes[node]['a'] == 'BondElement':
-            # ask users if there is any parameter for this node
-            print('How many parameters for this node?')
-            param = input()
-            if int(param)>0:
-                G.nodes[node]['modelParameter'] = {}
-                for p in range(int(param)):
-                    G.nodes[node]['modelParameter'][f'param_{p+1}'] = None               
-            # ask users if there is any state variable for this node
-            print('How many state variables for this node?')
-            state = input()
-            if int(state)>0:
-                G.nodes[node]['stateVariable'] = {}
-                for s in range(int(state)):
-                    G.nodes[node]['stateVariable'][f'q_{s+1}']= None
+    return direction          
 
 def nxBG_addJunctions(G):
     """
@@ -401,21 +464,38 @@ def nxBG_addJunctions(G):
 
 def nxBG_propogateEnergy(G):
 
+    for edge in G.edges:
+        if 'a' in G.edges[edge].keys() and G.edges[edge]['a']=='PowerBond':
+            viaPowerbond(G,edge)
     for node in G.nodes:
-        PowerPort2PowerBond(G,node)
-
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']!='Transformer':
+            viaJunction(G,node)
+    for node in G.nodes:
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='Transformer':
+            viaTransformer(G,node)
+    for node in G.nodes:
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']!='Transformer':
+            viaJunction(G,node)
+    for node in G.nodes:
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='Transformer':
+            viaTransformer(G,node)
+    # convert all the sympy expression to string
+    for node in G.nodes:
+        if G.nodes[node]['a']=='PowerPort':
+            if G.nodes[node]['effort'] is not None:
+                if 'expression' in G.nodes[node]['effort'].keys():
+                    G.nodes[node]['effort']['expression']=str(G.nodes[node]['effort']['expression'])                    
+            if G.nodes[node]['flow'] is not None:
+                if 'expression' in G.nodes[node]['flow'].keys():
+                    G.nodes[node]['flow']['expression']=str(G.nodes[node]['flow']['expression'])
     for edge in G.edges:
-        PowerBond2PowerPort(G,edge)
-
-    updateJunction_sharedVar(G)
-
-    updateJunction_conservation(G)
- 
-    updateJunction_sharedVar(G)
-
-    for edge in G.edges:
-        PowerBond2PowerPort(G,edge)
-
+        if 'a' in G.edges[edge].keys() and G.edges[edge]['a']=='PowerBond':
+            if G.edges[edge]['effort'] is not None:
+                if 'expression' in G.edges[edge]['effort'].keys():
+                    G.edges[edge]['effort']['expression']=str(G.edges[edge]['effort']['expression'])
+            if G.edges[edge]['flow'] is not None:
+                if 'expression' in G.edges[edge]['flow'].keys():
+                    G.edges[edge]['flow']['expression']=str(G.edges[edge]['flow']['expression'])
     # check no None value in the effort and flow of the BondElement
     for node in G.nodes:
         if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement':
@@ -427,24 +507,58 @@ def nxBG_propogateEnergy(G):
 def nxBG_preCellML(G):
     input_vars=[]
     output_vars=[]
-    conservation_laws=[]
+    conservation_laws={}
     for node in G.nodes:
         if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement':
-            if G.nodes[node]['causality']=='flow-out':
-                input_vars.append(G.nodes[node]['flow'])
+            if G.nodes[node]['causality']=='flow':
+                input_vars.append(G.nodes[node]['flow']['propertyName'])
                 output_var='e_'+node
                 output_vars.append(output_var)
-                conservation_laws.append(output_var+'='+G.nodes[node]['effort'])
-            elif G.nodes[node]['causality']=='effort-out':
-                input_vars.append(G.nodes[node]['effort'])
+                conservation_laws.update({output_var:G.nodes[node]['effort']['expression']})
+            elif G.nodes[node]['causality']=='effort':
+                input_vars.append(G.nodes[node]['effort']['propertyName'])
                 output_var='f_'+node
                 output_vars.append(output_var)
-                conservation_laws.append(output_var+'='+G.nodes[node]['flow'])
+                conservation_laws.update({output_var:G.nodes[node]['flow']['expression']})
     return input_vars, output_vars, conservation_laws        
 
-if __name__ == "__main__": 
+def save_nxBG_json(G, filename='nx_BG.json'):
+    with open(filename, 'w') as f:
+        json.dump(json_graph.node_link_data(G,edges="edges"), f, indent=4)
 
+def load_nxBG_json(filename):
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    G = json_graph.node_link_graph(data, directed=True)
+    return G
+
+def nxBG_pyvis_net(G, filename='nx_BG.html'):
+    pyvis_net = Network(cdn_resources='in_line', directed=True)
+    pyvis_net.from_nx(G)
+    pyvis_net.set_options("""
+        var options = {
+            "edges": {
+                "smooth": false,
+                "width": 2
+            }
+        }
+    """)
+   # Generate the HTML content
+    html_content = pyvis_net.generate_html()
+
+    # Remove the div with class "card"
+    html_content = html_content.replace('<div class="card" style="width: 100%">', '').replace('<div id="mynetwork" class="card-body">', '<div id="mynetwork">').replace('</div>', '', 1)
+
+    # Ensure the graph takes the whole page
+    html_content = html_content.replace('<div id="mynetwork">', '<div id="mynetwork" style="width: 100%; height: 100vh;">')
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+if __name__ == "__main__": 
+    import webbrowser
+    import os
     G=nx.DiGraph()
+    path_='./data/'
     # Create a PyVis network with cdn_resources set to 'in_line'
     pyvis_net = Network(cdn_resources='in_line',directed =True)
     fmatrix='./data/SLC5_f.csv'
@@ -453,24 +567,18 @@ if __name__ == "__main__":
     nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
     nxBG_addJunctions(G)    
     nxBG_initEnergy(G)
+
     nxBG_propogateEnergy(G)
-    with open('nx_BG_propogateEnergy.json', 'w') as f:
-        json.dump(json_graph.node_link_data(G,edges="edges"), f, indent=4)
-    
-    pyvis_net.from_nx(G)
-
-    # Save the network to an HTML file with utf-8 encoding
-    html_file = "BG.html"
-    with open(html_file, 'w', encoding='utf-8') as f:
-        f.write(pyvis_net.generate_html())
-
-    # Display the network in the default web browser
-    import webbrowser
-    webbrowser.open(html_file)
+    save_nxBG_json(G, path_+'nx_BG_Energy.json')
+    nxBG_pyvis_net(G, path_+'nx_BG_Energy.html')
+    # Get the default web browser
+    browser = webbrowser.get()
+    browser.open(os.path.abspath(path_ + 'nx_BG_Energy.html'))   
+   
 
     input_vars, output_vars, conservation_laws=nxBG_preCellML(G)
     print('Input variables:', input_vars)
     print('Output variables:', output_vars)
     print('Conservation laws:')
-    for law in conservation_laws:
-        print(law)
+    for output_var, expression in conservation_laws.items():
+        print(f'{output_var} = {expression}')
