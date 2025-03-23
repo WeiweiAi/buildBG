@@ -50,14 +50,14 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
         iport=f'{cName[i]}_{cPort[i]}'
         if connection=='PowerBond':
             if i<len(eName):
-                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort', orientation='in')
+                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort')
             if i>=len(eName):
-                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow', orientation='in')
+                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow')
             
-            G.add_edge(cName[i],iport, relationship='hasPowerPort')
+            G.add_edge(iport, cName[i], relationship='hasPowerPort')# By default, the positive reference direction for energy flows is inward
         elif connection=='SignalBond':
             G.add_node(iport, a='SignalPort', isPortOf=G.nodes[cName[i]]['a'], signal=None)
-            G.add_edge(cName[i],iport, relationship='hasSignalPort')
+            G.add_edge(iport, cName[i], relationship='hasSignalPort')
         else:
             raise ValueError('The connection type is not correct')
         
@@ -66,9 +66,9 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             iport=f'{eName[i]}_{ePort[i]}'
             jport=f'{fName[j]}_{fPort[j]}'
             if N[i][j]>0:
-                G.add_edge(iport,jport, weight=str(N[i][j]), a=connection, effort=None, flow=None)
+                G.add_edge(iport,jport, multiplier=str(N[i][j]), a=connection, effort=None, flow=None)
             elif N[i][j]<0:   
-                G.add_edge(jport,iport, weight=str(-N[i][j]), a=connection, effort=None, flow=None)
+                G.add_edge(jport,iport, multiplier=str(-N[i][j]), a=connection, effort=None, flow=None)
     return G
 
 def nxBG_addJunction(G):
@@ -101,43 +101,32 @@ def nxBG_addJunction(G):
                 jport=f'{jName}_{jPort}'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality=G.nodes[node]['causality'])
                 G.add_edge(jName,jport, relationship='hasPowerPort')
-                G.add_edge(jport,edge[1], weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=None, flow=None)
+                G.add_edge(jport,edge[1], multiplier=G.edges[edge]['multiplier'], a=G.edges[edge]['a'], effort=None, flow=None)
                 G.remove_edge(edge[0],edge[1])
             for edge in in_edges:
                 jPort+=1
                 jport=f'{jName}_{jPort}'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality=G.nodes[node]['causality'])
-                G.add_edge(jName,jport, relationship='hasPowerPort')
-                G.add_edge(edge[0],jport, weight=G.edges[edge]['weight'], a=G.edges[edge]['a'], effort=None, flow=None)
+                G.add_edge(jport,jName, relationship='hasPowerPort')
+                G.add_edge(edge[0],jport, multiplier=G.edges[edge]['multiplier'], a=G.edges[edge]['a'], effort=None, flow=None)
                 G.remove_edge(edge[0],edge[1]) 
             jPort=0
             jport=f'{jName}_{jPort}'
             if G.nodes[node]['causality']=='effort':
                 G.nodes[jName]['subClass']='ZeroJunctionStructure'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='flow')
-                if G.nodes[node]['orientation']=='in':
-                    G.add_edge(jport,node, weight='1', a='PowerBond', effort=None, flow=None)
-                elif G.nodes[node]['orientation']=='out':
-                    G.add_edge(node,jport, weight='1', a='PowerBond', effort=None, flow=None)
-                else:
-                    raise ValueError('The positive flow direction is unknown')
-                
+                G.add_edge(jport,node, multiplier='1', a='PowerBond', effort=None, flow=None)                
             elif G.nodes[node]['causality']=='flow':
                 G.nodes[jName]['subClass']='OneJunctionStructure'
                 G.add_node(jport, a='PowerPort', isPortOf=G.nodes[jName]['a'], effort=None, flow=None, causality='effort')
-                if G.nodes[node]['orientation']=='in':
-                    G.add_edge(jport,node,weight='1', a='PowerBond', effort=None, flow=None)
-                elif G.nodes[node]['orientation']=='out':
-                    G.add_edge(node,jport, weight='1', a='PowerBond', effort=None, flow=None)
-                else:
-                    raise ValueError('The positive flow direction is unknown')
+                G.add_edge(jport,node,multiplier='1', a='PowerBond', effort=None, flow=None)
             else:
                 raise ValueError('The causality is not correct.')      
             G.add_edge(jName,jport, relationship='hasPowerPort')
 
 def nxBG_addJunction_multi(G):
     """
-    This function is used to replace the PowerBond with the Transformer in case the PowerBond has the weight not equal to 1
+    This function is used to replace the PowerBond with the Transformer in case the PowerBond has the multiplier not equal to 1
 
     Parameters
     ----------
@@ -151,14 +140,17 @@ def nxBG_addJunction_multi(G):
     None
     
     """
-    PowerBonds=[edge for edge in G.edges if 'a' in G.edges[edge].keys() and  G.edges[edge]['a']=='PowerBond' and float(G.edges[edge]['weight'])!=1]    
+    PowerBonds=[edge for edge in G.edges if 'a' in G.edges[edge].keys() and  G.edges[edge]['a']=='PowerBond' and G.edges[edge]['multiplier']!='1']    
     for edge in PowerBonds:
         source=edge[0]
         target=edge[1]
         TFName='TF_'+source+'_'+target
-        G.add_node(TFName, a='JunctionStructure', subClass='Transformer', modelParameter={'param_1':
-                                                                                    {'propertyValue':float(G.edges[edge]['weight']), 'units':'dimensionless',
-                                                                                     'propertyName':TFName}})
+        G.add_node(TFName, a='JunctionStructure', subClass='Transformer', 
+                   modelParameter={'param_1':
+                                    {'propertyValue':G.edges[edge]['multiplier'], 'units':'dimensionless',
+                                    'propertyName':TFName}
+                                    },           
+            )
         # add the power ports of the transformer
         port_0=f'{TFName}_0'
         port_1=f'{TFName}_1'
@@ -167,19 +159,70 @@ def nxBG_addJunction_multi(G):
         G.add_node(port_1, a='PowerPort', isPortOf=G.nodes[TFName]['a'], effort=None, flow=None, causality='effort')
         G.add_edge(TFName,port_1, relationship='hasPowerPort')
         if G.nodes[source]['causality']=='effort':
-            G.add_edge(source,port_0, weight='1', a='PowerBond', effort=None, flow=None)
-            G.add_edge(port_1,target, weight='1', a='PowerBond', effort=None, flow=None)
+            G.add_edge(source,port_0, multiplier='1', a='PowerBond', effort=None, flow=None)
+            G.add_edge(port_1,target, multiplier='1', a='PowerBond', effort=None, flow=None)
         elif G.nodes[source]['causality']=='flow':
-            G.add_edge(source,port_1, weight='1', a='PowerBond',  effort=None, flow=None)
-            G.add_edge(port_0,target, weight='1', a='PowerBond',  effort=None, flow=None)
+            G.add_edge(source,port_1, multiplier='1', a='PowerBond',  effort=None, flow=None)
+            G.add_edge(port_0,target, multiplier='1', a='PowerBond',  effort=None, flow=None)
         else:
             raise ValueError('The causality is not correct')
         G.remove_edge(source,target)
 
+def nxBG_addJunctions(G):
+    """
+    This function is used to add transformers, 0 and 1 junctions
+    """
+    nxBG_addJunction_multi(G)
+    nxBG_addJunction(G)
+
+def getPowerPorts(G,bondElement):
+    """
+    This function is used to get the power ports of the bond element
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    bondElement : str
+        The name of the bond element
+
+    Returns
+    -------
+    ports : list
+        The list of the power ports of the bond element
+    """
+    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasPowerPort'] # get the power ports of the bond element
+    ports+= [in_edge[0] for in_edge in G.in_edges(bondElement) if 'relationship' in G.edges[in_edge] and G.edges[in_edge]['relationship']=='hasPowerPort']
+    return ports
+
+def getSignalPorts(G,bondElement):
+    """
+    This function is used to get the signal ports of the bond element
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    bondElement : str
+        The name of the bond element
+
+    Returns
+    -------
+    ports : list
+        The list of the signal ports of the bond element
+    """
+    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasSignalPort'] # get the signal ports of the bond element
+    return ports
+
 def nxBG_initEnergy(G):
     """
     This function is used to initialize:
-    the output variable of the PowerPort of the BondElement based on the causality of the PowerBond, either effort or flow
+    the output variable of the PowerPort of the BondElement based on the causality of the PowerBond, either effort or flow,
+    the variable is stored as 'propertyName'
 
     """
     for node in G.nodes:
@@ -280,48 +323,6 @@ def viaPowerbond(G,edge):
         return False
     else:
         return True
-
-def getPowerPorts(G,bondElement):
-    """
-    This function is used to get the power ports of the bond element
-
-    Parameters
-    ----------
-    G : nx.DiGraph
-        The bond graph built using networkx
-        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
-        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
-    bondElement : str
-        The name of the bond element
-
-    Returns
-    -------
-    ports : list
-        The list of the power ports of the bond element
-    """
-    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasPowerPort'] # get the power ports of the bond element
-    return ports
-
-def getSignalPorts(G,bondElement):
-    """
-    This function is used to get the signal ports of the bond element
-
-    Parameters
-    ----------
-    G : nx.DiGraph
-        The bond graph built using networkx
-        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
-        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
-    bondElement : str
-        The name of the bond element
-
-    Returns
-    -------
-    ports : list
-        The list of the signal ports of the bond element
-    """
-    ports=[out_edge[1] for out_edge in G.out_edges(bondElement) if 'relationship' in G.edges[out_edge] and G.edges[out_edge]['relationship']=='hasSignalPort'] # get the signal ports of the bond element
-    return ports
 
 def viaJunction(G,nodeJunction):
     """
@@ -424,20 +425,75 @@ def viaTransformer(G,TF):
     port_1=ports[1]
     direction_0=checkBondDirection(G,port_0)
     direction_1=checkBondDirection(G,port_1)
+    causality_0=G.nodes[port_0]['causality']
+    causality_1=G.nodes[port_1]['causality']
+    param_value = sympify(G.nodes[TF]['modelParameter']['param_1']['propertyValue'])
     if direction_0!=direction_1:
-        if G.nodes[port_0][G.nodes[port_0]['causality']] is None and G.nodes[port_1][G.nodes[port_0]['causality']] is not None:
-            G.nodes[port_0][G.nodes[port_0]['causality']]={}
-            G.nodes[port_0][G.nodes[port_0]['causality']]['expression']=G.nodes[port_1][G.nodes[port_0]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
-        if G.nodes[port_1][G.nodes[port_1]['causality']] is None and G.nodes[port_0][G.nodes[port_1]['causality']] is not None:
-            G.nodes[port_1][G.nodes[port_1]['causality']]={}
-            G.nodes[port_1][G.nodes[port_1]['causality']]['expression']=G.nodes[port_0][G.nodes[port_1]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+        if G.nodes[port_0][causality_0] is None and G.nodes[port_1][causality_0] is not None:
+            G.nodes[port_0][causality_0]={}
+            G.nodes[port_0][causality_0]['expression']=G.nodes[port_1][causality_0]['expression']*param_value
+        if G.nodes[port_1][causality_1] is None and G.nodes[port_0][causality_1] is not None:
+            G.nodes[port_1][causality_1]={}
+            G.nodes[port_1][causality_1]['expression']=G.nodes[port_0][causality_1]['expression']*param_value
     else:
-        if G.nodes[port_0][G.nodes[port_0]['causality']] is None and G.nodes[port_1][G.nodes[port_0]['causality']] is not None:
-            G.nodes[port_0][G.nodes[port_0]['causality']]={}
-            G.nodes[port_0][G.nodes[port_0]['causality']]['expression']=-G.nodes[port_1][G.nodes[port_0]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
-        if G.nodes[port_1][G.nodes[port_1]['causality']] is None and G.nodes[port_0][G.nodes[port_1]['causality']] is not None:
-            G.nodes[port_1][G.nodes[port_1]['causality']]={}
-            G.nodes[port_1][G.nodes[port_1]['causality']]['expression']=-G.nodes[port_0][G.nodes[port_1]['causality']]['expression']*G.nodes[TF]['modelParameter']['param_1']['propertyValue']
+        if G.nodes[port_0][causality_0] is None and G.nodes[port_1][causality_0] is not None:
+            G.nodes[port_0][causality_0]={}
+            G.nodes[port_0][causality_0]['expression']=-G.nodes[port_1][causality_0]['expression']*param_value
+        if G.nodes[port_1][causality_1] is None and G.nodes[port_0][causality_1] is not None:
+            G.nodes[port_1][causality_1]={}
+            G.nodes[port_1][causality_1]['expression']=-G.nodes[port_0][causality_1]['expression']*param_value
+    
+    powerBonds= [u for u in G.out_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+    viaPowerbond(G,powerBonds[0])
+    powerBonds= [u for u in G.out_edges(port_1) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port_1) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
+    viaPowerbond(G,powerBonds[0])
+    return True
+
+def viaGyrator(G,GY):
+    """
+    This function is used to propagate the energy through the Transformer
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+    TF : str
+        The name of the Transformer
+
+    Returns
+    -------
+    None
+
+    side effects
+    ------------
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Transformer
+    
+    """
+
+    ports=getPowerPorts(G,GY)
+    port_0=ports[0]
+    port_1=ports[1]
+    direction_0=checkBondDirection(G,port_0)
+    direction_1=checkBondDirection(G,port_1)
+    causality_0=G.nodes[port_0]['causality']
+    causality_1=G.nodes[port_1]['causality']
+    param_value = sympify(G.nodes[GY]['modelParameter']['param_1']['propertyValue'])
+    if direction_0!=direction_1:
+        if G.nodes[port_0][causality_0] is None and G.nodes[port_1][causality_1] is not None:
+            G.nodes[port_0][causality_0]={}
+            G.nodes[port_0][causality_0]['expression']=G.nodes[port_1][causality_1]['expression']*param_value
+        if G.nodes[port_1][causality_1] is None and G.nodes[port_0][causality_0] is not None:
+            G.nodes[port_1][causality_1]={}
+            G.nodes[port_1][causality_1]['expression']=G.nodes[port_0][causality_0]['expression']*param_value
+    else:
+        if G.nodes[port_0][causality_0] is None and G.nodes[port_1][causality_1] is not None:
+            G.nodes[port_0][causality_0]={}
+            G.nodes[port_0][causality_0]['expression']=-G.nodes[port_1][causality_1]['expression']*param_value
+        if G.nodes[port_1][causality_1] is None and G.nodes[port_0][causality_0] is not None:
+            G.nodes[port_1][causality_1]={}
+            G.nodes[port_1][causality_1]['expression']=-G.nodes[port_0][causality_0]['expression']*param_value
     
     powerBonds= [u for u in G.out_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']+ [u for u in G.in_edges(port_0) if 'a' in G.edges[u].keys() and G.edges[u]['a']=='PowerBond']
     viaPowerbond(G,powerBonds[0])
@@ -454,15 +510,7 @@ def checkBondDirection(G,port):
         raise ValueError('The direction is not correct')
     return direction          
 
-def nxBG_addJunctions(G):
-    """
-    This function is used to add transformers and 0 or 1 junctions
-    """
-    nxBG_addJunction_multi(G)
-    nxBG_addJunction(G)
-
-
-def nxBG_propogateEnergy(G):
+def nxBG_Energy(G):
 
     for edge in G.edges:
         if 'a' in G.edges[edge].keys() and G.edges[edge]['a']=='PowerBond':
@@ -529,17 +577,88 @@ def save_nxBG_json(G, filename='nx_BG.json'):
 def load_nxBG_json(filename):
     with open(filename, 'r') as f:
         data = json.load(f)
-    G = json_graph.node_link_graph(data, directed=True)
+    G = json_graph.node_link_graph(data, edges="edges", directed=True)
     return G
 
-def nxBG_pyvis_net(G, filename='nx_BG.html'):
+def pyvis_BG(G):
     pyvis_net = Network(cdn_resources='in_line', directed=True)
     pyvis_net.from_nx(G)
+    return pyvis_net
+
+def pyvis_net_fomat(pyvis_net):
+    """
+    This function is used to format the bond graph (pyvis_net) for visualization
+        
+    """ 
+    for node in pyvis_net.nodes:
+        if 'a' in node.keys():
+            if node['a']=='BondElement':
+                node['shape']='box'
+                node['size']=20
+                node['color']={'background':'cyan'}
+                node['group']='BondElement'
+            elif node['a']=='JunctionStructure':
+                node['size']=5
+                if node['subClass']=='ZeroJunctionStructure':
+                    node['shape']='dot'
+                    node['color']={'background':'blue'}
+                elif node['subClass']=='OneJunctionStructure':
+                    node['shape']='dot'
+                    node['color']={'background':'black'}
+                elif node['subClass']=='Transformer':
+                    node['shape']='square'
+                    node['color']={'background':'yellow'}
+            elif node['a']=='PowerPort':
+                node['shape']='diamond'
+                node['size']=5
+                node['color']={'background':'white'}
+                node['group']='PowerPort'
+            elif node['a']=='SignalPort':
+                node['shape']='hexagon'
+                node['size']=5
+                node['color']={'background':'black'}
+            node['label']=node['id']
+            node['font']={'size':10} 
+    for edge in pyvis_net.edges:
+        if 'a' in edge.keys():
+            if edge['a']=='PowerBond':
+                edge['color']={'color':'blue'}
+                edge['length']=100
+                edge['width']=2
+            elif edge['a']=='SignalBond':
+                edge['color']={'color':'black'}
+        else:
+            edge['dashes']='true'
+            edge['color']={'color':'gray'}
+            edge['length']=10
+            edge['width']=1
+
+
+
+def nxBG_pyvis_net(pyvis_net, filename='nx_BG.html'):
     pyvis_net.set_options("""
         var options = {
             "edges": {
-                "smooth": false,
+                "smooth": true,
                 "width": 2
+            },
+            "physics": {
+                "enabled": true,
+                "barnesHut": {
+                  "gravitationalConstant": -20000,
+                  "centralGravity": 0.8,
+                  "springLength": 100,  
+                  "springConstant": 0.8
+                },
+                "repulsion": {
+                  "nodeDistance": 20, 
+                  "springLength": 20    
+                },
+                "hierarchicalRepulsion": {
+                  "nodeDistance": 10,
+                  "springLength": 5 
+                },
+                "minVelocity": 0.75
             }
         }
     """)
@@ -554,27 +673,46 @@ def nxBG_pyvis_net(G, filename='nx_BG.html'):
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
+def save_nxBG_pyvis_net(G, filename='nx_BG.html'):
+
+    pyvis_net = pyvis_BG(G)
+    pyvis_net_fomat(pyvis_net)
+    nxBG_pyvis_net(pyvis_net, filename)
+
+
 if __name__ == "__main__": 
     import webbrowser
     import os
     G=nx.DiGraph()
+    # Get the default web browser
+    browser = webbrowser.get()
     path_='./data/'
-    # Create a PyVis network with cdn_resources set to 'in_line'
-    pyvis_net = Network(cdn_resources='in_line',directed =True)
     fmatrix='./data/SLC5_f.csv'
     rmatrix='./data/SLC5_r.csv'
     nxBG(G, fmatrix, direction='e2f', connection='PowerBond')
     nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
-    nxBG_addJunctions(G)    
+    
+    save_nxBG_json(G, path_+'nx_BG_0.json')
+    save_nxBG_pyvis_net(G, path_+'nx_BG_0.html')
+    browser.open(os.path.abspath(path_ + 'nx_BG_0.html'))   
+    
+    nxBG_addJunctions(G)
+
     nxBG_initEnergy(G)
 
-    nxBG_propogateEnergy(G)
+    nxBG_Energy(G)
+
     save_nxBG_json(G, path_+'nx_BG_Energy.json')
-    nxBG_pyvis_net(G, path_+'nx_BG_Energy.html')
-    # Get the default web browser
-    browser = webbrowser.get()
-    browser.open(os.path.abspath(path_ + 'nx_BG_Energy.html'))   
-   
+    save_nxBG_pyvis_net(G, path_+'nx_BG_Energy.html')
+    
+    browser.open(os.path.abspath(path_ + 'nx_BG_Energy.html')) 
+    G_1=load_nxBG_json(path_+'nx_BG_Energy_1.json') 
+
+    G2=nx.compose(G,G_1)
+    nxBG_addJunction(G2)
+    save_nxBG_json(G2, path_+'nx_BG_Energy_2.json')
+    save_nxBG_pyvis_net(G2, path_+'nx_BG_Energy_2.html')
+    browser.open(os.path.abspath(path_ + 'nx_BG_Energy_2.html'))
 
     input_vars, output_vars, conservation_laws=nxBG_preCellML(G)
     print('Input variables:', input_vars)
@@ -582,3 +720,4 @@ if __name__ == "__main__":
     print('Conservation laws:')
     for output_var, expression in conservation_laws.items():
         print(f'{output_var} = {expression}')
+    
