@@ -42,11 +42,15 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             elif cID[i]=='0': # BondGraph Junction
                 G.add_node(cName[i], a='JunctionStructure', subClass='ZeroJunctionStructure')
             elif cID[i]=='TF': # BondGraph Transformer
-                G.add_node(cName[i], a='JunctionStructure', subClass='Transformer')
+                G.add_node(cName[i], a='JunctionStructure', subClass='TF')
             elif cID[i]=='GY': # BondGraph Gyrator
-                G.add_node(cName[i], a='JunctionStructure', subClass='Gyrator')
+                G.add_node(cName[i], a='JunctionStructure', subClass='GY')
+            elif cID[i]=='MTF': # BondGraph modulated Transformer
+                G.add_node(cName[i], a='JunctionStructure', subClass='MTF')
+            elif cID[i]=='MGY': # BondGraph modulated Gyrator
+                G.add_node(cName[i], a='JunctionStructure', subClass='MGY')
             else: # BondGraph Element
-                G.add_node(cName[i], a='BondElement',component=cID[i])
+                G.add_node(cName[i], a='BondElement',subClass=cID[i]) # R, C, I, MR, MC, MI, MIC, Se, Sf, MSe, MSf, RS, MRS
         iport=f'{cName[i]}_{cPort[i]}'
         if connection=='PowerBond':
             if i<len(eName):
@@ -145,7 +149,7 @@ def nxBG_addJunction_multi(G):
         source=edge[0]
         target=edge[1]
         TFName='TF_'+source+'_'+target
-        G.add_node(TFName, a='JunctionStructure', subClass='Transformer', 
+        G.add_node(TFName, a='JunctionStructure', subClass='TF', 
                    modelParameter={'param_1':
                                     {'propertyValue':G.edges[edge]['multiplier'], 'units':'dimensionless',
                                     'propertyName':TFName}
@@ -451,7 +455,7 @@ def viaTransformer(G,TF):
 
 def viaGyrator(G,GY):
     """
-    This function is used to propagate the energy through the Transformer
+    This function is used to propagate the energy through the Gyrator
 
     Parameters
     ----------
@@ -459,8 +463,8 @@ def viaGyrator(G,GY):
         The bond graph built using networkx
         Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
         Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
-    TF : str
-        The name of the Transformer
+    GY : str
+        The name of the Gyrator
 
     Returns
     -------
@@ -468,7 +472,7 @@ def viaGyrator(G,GY):
 
     side effects
     ------------
-    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Transformer
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Gyrator
     
     """
 
@@ -516,17 +520,21 @@ def nxBG_Energy(G):
         if 'a' in G.edges[edge].keys() and G.edges[edge]['a']=='PowerBond':
             viaPowerbond(G,edge)
     for node in G.nodes:
-        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']!='Transformer':
+        if G.nodes[node]['a']=='JunctionStructure' and (G.nodes[node]['subClass']=='OneJunctionStructure' or G.nodes[node]['subClass']=='ZeroJunctionStructure'):
             viaJunction(G,node)
     for node in G.nodes:
-        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='Transformer':
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='TF':
             viaTransformer(G,node)
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='GY':
+            viaGyrator(G,node)
     for node in G.nodes:
-        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']!='Transformer':
+        if G.nodes[node]['a']=='JunctionStructure' and (G.nodes[node]['subClass']=='OneJunctionStructure' or G.nodes[node]['subClass']=='ZeroJunctionStructure'):
             viaJunction(G,node)
     for node in G.nodes:
-        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='Transformer':
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='TF':
             viaTransformer(G,node)
+        if G.nodes[node]['a']=='JunctionStructure' and G.nodes[node]['subClass']=='GY':
+            viaGyrator(G,node)
     # convert all the sympy expression to string
     for node in G.nodes:
         if G.nodes[node]['a']=='PowerPort':
@@ -605,9 +613,12 @@ def pyvis_net_fomat(pyvis_net):
                 elif node['subClass']=='OneJunctionStructure':
                     node['shape']='dot'
                     node['color']={'background':'black'}
-                elif node['subClass']=='Transformer':
+                elif node['subClass']=='TF' or node['subClass']=='MTF':
                     node['shape']='square'
                     node['color']={'background':'yellow'}
+                elif node['subClass']=='GY' or node['subClass']=='MGY':
+                    node['shape']='square'
+                    node['color']={'background':'blue'}
             elif node['a']=='PowerPort':
                 node['shape']='diamond'
                 node['size']=5
