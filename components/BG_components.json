@@ -1,0 +1,703 @@
+{
+    "1": {
+        "description": "biochemical components",
+        "domain": "biochemical",
+        "effort": {
+            "description": "chemical potential",
+            "units": "J_per_mol",
+            "symbol": "mu"
+        },
+        "flow": {
+            "description": "molar flow",
+            "units": "fmol_per_s",
+            "symbol": "v"
+        },
+        "generalized displacement": {
+            "description": "molar quantity",
+            "units": "fmol",
+            "symbol": "q"
+        },
+        "physical constants": {
+            "R": {
+                "description": "universal gas constant",
+                "units": "J_per_K_mol",
+                "symbol": "R",
+                "value": 8.31
+            },
+            "F": {
+                "description": "Faraday's constant",
+                "value": 96485,
+                "units": "C_per_mol",
+                "symbol": "F"
+            }
+        },
+        "thermodynamic parameters": {
+            "T": {
+                "description": "temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293
+            }
+        },
+        "components": {
+            "Ce": {
+                "description": "chemical species",
+                "metamodel": "C",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "K": {
+                        "description": "thermodynamic constant; exp(mu_0/RT)/V",
+                        "units": "per_fmol",
+                        "symbol": "K",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - R*T*log(K*q_0)",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "Re": {
+                "description": "biochemical reaction",
+                "metamodel": "R",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    },
+                    "1": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "kappa": {
+                        "description": "reaction rate",
+                        "units": "fmol_per_s",
+                        "value": 1,
+                        "symbol": "kappa"
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - kappa*(exp(e_0/R/T) - exp(e_1/R/T))",
+                    "f_0 - f_1"
+                ]
+            },
+            "Re_GHK": {
+                "description": "voltage modulated biochemical reaction-Goldman-Hodgkin-Katz (GHK) ion channel",
+                "metamodel": "MR",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    },
+                    "1": {
+                        "orientation": "out"
+                    }
+                },
+                "signals": {
+                    "m": {
+                        "description": "modulation port",
+                        "orientation": "in",
+                        "units": "J_per_mol",
+                        "symbol": "Am"
+                    }
+                },
+                "params": {
+                    "kappa": {
+                        "description": "reaction rate",
+                        "units": "fmol_per_s",
+                        "value": 1,
+                        "symbol": "kappa"
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0- Piecewise(( kappa*(exp(e_0/R/T) - exp(e_1/R/T)),s_m==0),(kappa*(s_m/R/T/(exp(s_m/R/T)))*((exp(e_0/R/T) - exp(e_1/R/T))),s_m!=0))",
+                    "f_0-f_1"
+                ]
+            },
+            "zF": {
+                "description": "biochemical-electrical transformer",
+                "metamodel": "TF",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    },
+                    "1": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "z": {
+                        "description": "Ratio",
+                        "value": 1,
+                        "units": "dimensionless",
+                        "symbol": "z"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_1 - z * F * e_0",
+                    "f_0 - z * F * f_1"
+                ]
+            },
+            "Se": {
+                "description": "chemostat",
+                "metamodel": "Se",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "K": {
+                        "description": "thermodynamic constant; exp(mu_0/RT)/V",
+                        "units": "per_fmol",
+                        "symbol": "K",
+                        "value": 1
+                    },
+                    "q_0": {
+                        "description": "molar quantity",
+                        "units": "fmol",
+                        "symbol": "q_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - R*T*log(K*q_0)"
+                ]
+            },
+            "Sf": {
+                "description": "flow source",
+                "metamodel": "Sf",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "f": {
+                        "description": "molar flow",
+                        "units": "fmol_per_s",
+                        "symbol": "v_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - f"
+                ]
+            }
+        }
+    },
+    "2": {
+        "description": "electrical components",
+        "domain": "electrical",
+        "effort": {
+            "description": "voltage",
+            "units": "volt",
+            "symbol": "u"
+        },
+        "flow": {
+            "description": "current",
+            "units": "fA",
+            "symbol": "i"
+        },
+        "generalized displacement": {
+            "description": "charge",
+            "units": "fC",
+            "symbol": "q"
+        },
+        "generalized momentum": {
+            "description": "magnetic flux linkage",
+            "units": "volt_s",
+            "symbol": "p"
+        },
+        "components": {
+            "R": {
+                "description": "linear resistor",
+                "metamodel": "R",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "R": {
+                        "description": "resistance",
+                        "value": 1,
+                        "units": "pOhm",
+                        "symbol": "R"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - f_0*R"
+                ]
+            },
+            "G": {
+                "description": "linear conductance",
+                "metamodel": "G",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "G": {
+                        "description": "conductance",
+                        "value": 1,
+                        "units": "tS",
+                        "symbol": "G"
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - e_0*G"
+                ]
+            },
+            "C": {
+                "description": "linear capacitor",
+                "metamodel": "C",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "C": {
+                        "description": "capacitance",
+                        "value": 1,
+                        "units": "fF",
+                        "symbol": "C"
+                    }
+                },
+                "constitutive_relations": [
+                    "q_0 - C * e_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "E": {
+                "description": "linear elastance",
+                "metamodel": "E",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "E": {
+                        "description": "elastance",
+                        "value": 1,
+                        "units": "per_fF",
+                        "symbol": "E"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - E * q_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "I": {
+                "description": "linear inductor",
+                "metamodel": "I",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "L": {
+                        "description": "inductance",
+                        "value": 1,
+                        "units": "pH",
+                        "symbol": "L"
+                    }
+                },
+                "constitutive_relations": [
+                    "p_0 - L*f_0",
+                    "ode(p_0,t) - e_0"
+                ]
+            },
+            "Se": {
+                "description": "external voltage source",
+                "metamodel": "Se",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "e": {
+                        "description": "voltage",
+                        "units": "volt",
+                        "symbol": "u_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - e"
+                ]
+            },
+            "Sf": {
+                "description": "external current source",
+                "metamodel": "Sf",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "f": {
+                        "description": "current",
+                        "units": "fA",
+                        "symbol": "i_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - f"
+                ]
+            },
+            "TF": {
+                "description": "linear transformer",
+                "metamodel": "TF",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    },
+                    "1": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "n": {
+                        "description": "ratio",
+                        "value": 1,
+                        "units": "dimensionless",
+                        "symbol": "n"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_1 - n * e_0",
+                    "f_0 - n * f_1"
+                ]
+            }
+        }
+    },
+    "3": {
+        "description": "mechanical components",
+        "domain": "mechanical",
+        "effort": {
+            "description": "force",
+            "units": "J_per_um",
+            "symbol": "F"
+        },
+        "flow": {
+            "description": "velocity",
+            "units": "um_per_s",
+            "symbol": "v"
+        },
+        "generalized displacement": {
+            "description": "displacement",
+            "units": "um",
+            "symbol": "x"
+        },
+        "generalized momentum": {
+            "description": "momentum",
+            "units": "J_s_per_um",
+            "symbol": "p"
+        },
+        "components": {
+            "R": {
+                "description": "linear damper",
+                "metamodel": "R",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "R": {
+                        "description": "coefficient of friction or viscosity",
+                        "value": 1,
+                        "units": "J_s_per_um2",
+                        "symbol": "eta"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - f_0*R"
+                ]
+            },
+            "C": {
+                "description": "linear capacitance",
+                "metamodel": "C",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "C": {
+                        "description": "capacitance",
+                        "value": 1,
+                        "units": "um2_per_J",
+                        "symbol": "C"
+                    }
+                },
+                "constitutive_relations": [
+                    "q_0 - C * e_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "E": {
+                "description": "linear spring",
+                "metamodel": "E",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "k": {
+                        "description": "elastance",
+                        "value": 1,
+                        "units": "J_per_um2",
+                        "symbol": "k"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - k * q_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "M": {
+                "description": "mass",
+                "metamodel": "I",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "m": {
+                        "description": "inertance",
+                        "value": 1,
+                        "units": "J_s2_per_um2",
+                        "symbol": "m"
+                    }
+                },
+                "constitutive_relations": [
+                    "p_0 - m*f_0",
+                    "ode(p_0,t) - e_0"
+                ]
+            },
+            "Se": {
+                "description": "external force source",
+                "metamodel": "Se",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "e": {
+                        "description": "force",
+                        "units": "J_per_um",
+                        "symbol": "F_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - e"
+                ]
+            },
+            "Sf": {
+                "description": "external velocity source",
+                "metamodel": "Sf",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "f": {
+                        "description": "velocity",
+                        "units": "um_per_s",
+                        "symbol": "v_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - f"
+                ]
+            }
+        }
+    },
+    "4": {
+        "description": "hydraulic components",
+        "domain": "hydraulic",
+        "effort": {
+            "description": "pressure",
+            "units": "mmHg",
+            "symbol": "P"
+        },
+        "flow": {
+            "description": "volum flow",
+            "units": "mL_per_s",
+            "symbol": "Q"
+        },
+        "generalized displacement": {
+            "description": "volume",
+            "units": "mL",
+            "symbol": "V"
+        },
+        "generalized momentum": {
+            "description": "momentum of a flow tube",
+            "units": "mmHg_mL2_per_s3",
+            "symbol": "p"
+        },
+        "components": {
+            "R": {
+                "description": "linear resistance",
+                "metamodel": "R",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "R": {
+                        "description": "resistance",
+                        "value": 1,
+                        "units": "mmHg_s_per_mL",
+                        "symbol": "R"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - f_0*R"
+                ]
+            },
+            "G": {
+                "description": "linear conductance",
+                "metamodel": "G",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "G": {
+                        "description": "conductance",
+                        "value": 1,
+                        "units": "mL_per_mmHg_s",
+                        "symbol": "G"
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - e_0*G"
+                ]
+            },
+            "C": {
+                "description": "linear compliance",
+                "metamodel": "C",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "C": {
+                        "description": "volumetric compliance",
+                        "value": 1,
+                        "units": "mL_per_mmHg",
+                        "symbol": "C"
+                    }
+                },
+                "constitutive_relations": [
+                    "q_0 - C * e_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "E": {
+                "description": "linear elastance",
+                "metamodel": "E",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "E": {
+                        "description": "volumetric elastance",
+                        "value": 1,
+                        "units": "mmHg_per_mL",
+                        "symbol": "E"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - E * q_0",
+                    "ode(q_0,t) - f_0"
+                ]
+            },
+            "I": {
+                "description": "linear inductor",
+                "metamodel": "I",
+                "ports": {
+                    "0": {
+                        "orientation": "in"
+                    }
+                },
+                "params": {
+                    "L": {
+                        "description": "inertance",
+                        "value": 1,
+                        "units": "mmHg_s2_per_ml",
+                        "symbol": "L"
+                    }
+                },
+                "constitutive_relations": [
+                    "p_0 - L*f_0",
+                    "ode(p_0, t) - e_0"
+                ]
+            },
+            "Se": {
+                "description": "external pressure source",
+                "metamodel": "Se",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "e": {
+                        "description": "pressure",
+                        "units": "mmHg",
+                        "symbol": "P_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "e_0 - e"
+                ]
+            },
+            "Sf": {
+                "description": "external flow source",
+                "metamodel": "Sf",
+                "ports": {
+                    "0": {
+                        "orientation": "out"
+                    }
+                },
+                "params": {
+                    "f": {
+                        "description": "volum flow",
+                        "units": "mL_per_s",
+                        "symbol": "Q_0",
+                        "value": 1
+                    }
+                },
+                "constitutive_relations": [
+                    "f_0 - f"
+                ]
+            }
+        }
+    }
+}
