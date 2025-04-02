@@ -19,6 +19,18 @@ Ce = {
               "symbol": "K",
               "value": 1
           },
+          "R": {
+              "description": "universal gas constant",
+              "units": "J_per_K_mol",
+              "symbol": "R",
+              "value": 8.31
+          },
+          "T":{
+                "description": "temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293,
+            },
         
         },    
         "constitutive_relations":[
@@ -45,6 +57,18 @@ Re ={
               "value": 1,
               "symbol": "kappa"
           },
+          "R": {
+              "description": "universal gas constant",
+              "units": "J_per_K_mol",
+              "symbol": "R",
+              "value": 8.31
+          },
+          "T":{
+                "description": "temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293,
+            },
         },
        
         "constitutive_relations":[
@@ -55,7 +79,7 @@ Re ={
 
 zF = {
         "description": "biochemical-electrical transformer",
-        "metamodel": "TF",
+        "metamodel": "zF",
         "ports": {
             "0": {
                 'orientation': 'in',
@@ -70,6 +94,12 @@ zF = {
                 "value": 1,
                 "units": "dimensionless",
                 "symbol": "z",
+            },
+            "F": {
+                "description": "Faraday's constant",
+                "value": 96485,
+                "units": "C_per_mol",
+                "symbol": "F",
             },
         },
         "constitutive_relations": [
@@ -104,6 +134,18 @@ Re_GHK ={
               "value": 1,
               "symbol": "kappa"
           },
+          "R": {
+              "description": "universal gas constant",
+              "units": "J_per_K_mol",
+              "symbol": "R",
+              "value": 8.31
+          },
+          "T":{
+                "description": "temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293,
+            },
         },
         "constitutive_relations":[
           "f_0- Piecewise(( kappa*(exp(e_0/R/T) - exp(e_1/R/T)),s_m==0),(kappa*(s_m/R/T/(exp(s_m/R/T)))*((exp(e_0/R/T) - exp(e_1/R/T))),s_m!=0))",
@@ -125,6 +167,18 @@ Se = {
                 "units": "per_fmol",
                 "symbol": "K",
                 "value": 1
+            },
+            "R": {
+              "description": "universal gas constant",
+              "units": "J_per_K_mol",
+              "symbol": "R",
+              "value": 8.31
+          },
+          "T":{
+                "description": "temperature",
+                "units": "kelvin",
+                "symbol": "T",
+                "value": 293,
             },
             "q_0":{
                 "description":"molar quantity",

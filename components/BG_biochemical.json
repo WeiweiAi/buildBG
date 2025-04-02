@@ -53,6 +53,18 @@
                     "units": "per_fmol",
                     "symbol": "K",
                     "value": 1
+                },
+                "R": {
+                    "description": "universal gas constant",
+                    "units": "J_per_K_mol",
+                    "symbol": "R",
+                    "value": 8.31
+                },
+                "T": {
+                    "description": "temperature",
+                    "units": "kelvin",
+                    "symbol": "T",
+                    "value": 293
                 }
             },
             "constitutive_relations": [
@@ -77,6 +89,18 @@
                     "units": "fmol_per_s",
                     "value": 1,
                     "symbol": "kappa"
+                },
+                "R": {
+                    "description": "universal gas constant",
+                    "units": "J_per_K_mol",
+                    "symbol": "R",
+                    "value": 8.31
+                },
+                "T": {
+                    "description": "temperature",
+                    "units": "kelvin",
+                    "symbol": "T",
+                    "value": 293
                 }
             },
             "constitutive_relations": [
@@ -109,6 +133,18 @@
                     "units": "fmol_per_s",
                     "value": 1,
                     "symbol": "kappa"
+                },
+                "R": {
+                    "description": "universal gas constant",
+                    "units": "J_per_K_mol",
+                    "symbol": "R",
+                    "value": 8.31
+                },
+                "T": {
+                    "description": "temperature",
+                    "units": "kelvin",
+                    "symbol": "T",
+                    "value": 293
                 }
             },
             "constitutive_relations": [
@@ -118,7 +154,7 @@
         },
         "zF": {
             "description": "biochemical-electrical transformer",
-            "metamodel": "TF",
+            "metamodel": "zF",
             "ports": {
                 "0": {
                     "orientation": "in"
@@ -133,6 +169,12 @@
                     "value": 1,
                     "units": "dimensionless",
                     "symbol": "z"
+                },
+                "F": {
+                    "description": "Faraday's constant",
+                    "value": 96485,
+                    "units": "C_per_mol",
+                    "symbol": "F"
                 }
             },
             "constitutive_relations": [
@@ -154,6 +196,18 @@
                     "units": "per_fmol",
                     "symbol": "K",
                     "value": 1
+                },
+                "R": {
+                    "description": "universal gas constant",
+                    "units": "J_per_K_mol",
+                    "symbol": "R",
+                    "value": 8.31
+                },
+                "T": {
+                    "description": "temperature",
+                    "units": "kelvin",
+                    "symbol": "T",
+                    "value": 293
                 },
                 "q_0": {
                     "description": "molar quantity",
