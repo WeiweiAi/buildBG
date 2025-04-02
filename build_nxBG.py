@@ -1,14 +1,10 @@
 import networkx as nx
-from buildBG import load_matrix
-import matplotlib.pyplot as plt
-from networkx.readwrite import json_graph
-import json
-from pyvis.network import Network
+from utilities import load_matrix, save_nxBG_json, save_nxBG_html, load_nxBG_json
 from sympy import *
 
 def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
     """
-    This function is used to build the bond graph using networkx based on stoichiometric matrix
+    Build the bond graph using networkx based on stoichiometric matrix
     Note: The 0 or 1 junctions may not be added to the bond graph, which can be added by nxBG_addJunction function later
     
     Parameters
@@ -42,7 +38,12 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             elif cID[i]=='0': # BondGraph Junction
                 G.add_node(cName[i], a='JunctionStructure', subClass='ZeroJunctionStructure')
             elif cID[i]=='TF': # BondGraph Transformer
-                G.add_node(cName[i], a='JunctionStructure', subClass='TF')
+                G.add_node(cName[i], a='JunctionStructure', subClass='TF', modelParameter={'n':{'units':'dimensionless',
+                                    'propertyName':cName[i]}
+                                    },)
+            elif cID[i]=='zF': # BondGraph Transformer
+                G.add_node(cName[i], a='JunctionStructure', subClass='TF', modelParameter={'z':{'units':'dimensionless',
+                                    'propertyName':cName[i]},"F": {"description": "Faraday's constant", "units": "C_per_mol", "symbol": "F",'propertyName':"F"}},)
             elif cID[i]=='GY': # BondGraph Gyrator
                 G.add_node(cName[i], a='JunctionStructure', subClass='GY')
             elif cID[i]=='MTF': # BondGraph modulated Transformer
@@ -50,14 +51,13 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             elif cID[i]=='MGY': # BondGraph modulated Gyrator
                 G.add_node(cName[i], a='JunctionStructure', subClass='MGY')
             else: # BondGraph Element
-                G.add_node(cName[i], a='BondElement',subClass=cID[i]) # R, C, I, MR, MC, MI, MIC, Se, Sf, MSe, MSf, RS, MRS
+                G.add_node(cName[i], a='BondElement',subClass=cID[i]) # R, G (1/R), C, E (1/C), I, MR, MG, MC, ME, MI, MIC, MIE, Se, Sf, MSe, MSf, RS, MRS
         iport=f'{cName[i]}_{cPort[i]}'
         if connection=='PowerBond':
             if i<len(eName):
                 G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='effort')
             if i>=len(eName):
-                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow')
-            
+                G.add_node(iport, a='PowerPort', isPortOf=G.nodes[cName[i]]['a'], effort=None, flow=None, causality='flow')            
             G.add_edge(iport, cName[i], relationship='hasPowerPort')# By default, the positive reference direction for energy flows is inward
         elif connection=='SignalBond':
             G.add_node(iport, a='SignalPort', isPortOf=G.nodes[cName[i]]['a'], signal=None)
@@ -77,8 +77,8 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
 
 def nxBG_addJunction(G):
     """
-    This function is used to add the 0 or 1 junctions to the bond graph 
-    in case the PowerPort of the BondElement have more than 2 powerbond connections
+    Add the 0 or 1 junction to the bond graph 
+    in case the PowerPort of the BondElement has more than 2 powerbond connections
     
     Parameters
     ----------
@@ -130,7 +130,7 @@ def nxBG_addJunction(G):
 
 def nxBG_addJunction_multi(G):
     """
-    This function is used to replace the PowerBond with the Transformer in case the PowerBond has the multiplier not equal to 1
+    Replace the PowerBond with the Transformer in case the PowerBond has the multiplier not equal to 1
 
     Parameters
     ----------
@@ -150,8 +150,8 @@ def nxBG_addJunction_multi(G):
         target=edge[1]
         TFName='TF_'+source+'_'+target
         G.add_node(TFName, a='JunctionStructure', subClass='TF', 
-                   modelParameter={'param_1':
-                                    {'propertyValue':G.edges[edge]['multiplier'], 'units':'dimensionless',
+                   modelParameter={'n':
+                                    {'value':G.edges[edge]['multiplier'], 'units':'dimensionless',
                                     'propertyName':TFName}
                                     },           
             )
@@ -174,14 +174,14 @@ def nxBG_addJunction_multi(G):
 
 def nxBG_addJunctions(G):
     """
-    This function is used to add transformers, 0 and 1 junctions
+    Add transformers, 0 and 1 junctions
     """
     nxBG_addJunction_multi(G)
     nxBG_addJunction(G)
 
 def getPowerPorts(G,bondElement):
     """
-    This function is used to get the power ports of the bond element
+    Get the power ports of the bond element
 
     Parameters
     ----------
@@ -203,7 +203,7 @@ def getPowerPorts(G,bondElement):
 
 def getSignalPorts(G,bondElement):
     """
-    This function is used to get the signal ports of the bond element
+    Get the signal ports of the bond element
 
     Parameters
     ----------
@@ -224,10 +224,9 @@ def getSignalPorts(G,bondElement):
 
 def nxBG_initEnergy(G):
     """
-    This function is used to initialize:
-    the output variable of the PowerPort of the BondElement based on the causality of the PowerBond, either effort or flow,
-    the variable is stored as 'propertyName'
-
+    Initialization in case the output variable of the PowerPort of the BondElement is not defined:
+    the output variable of the PowerPort of the BondElement based on the causality, either effort or flow,
+    the variable is stored as 'propertyName' in the effort or flow dictionary of the PowerPort
     """
     for node in G.nodes:
         if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement':
@@ -240,7 +239,7 @@ def nxBG_initEnergy(G):
 
 def viaPowerbond(G,edge):
     """
-    This function is used to propagate the energy through the PowerBond
+    Propagate the energy through the PowerBond
     
     Parameters
     ----------
@@ -277,51 +276,27 @@ def viaPowerbond(G,edge):
         if G.nodes[source][source_var_out] is not None:
             if G.edges[edge][source_var_out] is None:
                 G.edges[edge][source_var_out]={}
-            if 'propertyName' in G.nodes[source][source_var_out].keys(): 
-                if 'expression' in G.edges[edge][source_var_out].keys():
-                    if symbols(G.nodes[source][source_var_out]['propertyName'])!=G.edges[edge][source_var_out]['expression']:
-                        raise ValueError(f'The {source_var_out} of the port {source} is not consistent with the PowerBond')
-                else:                   
-                    G.edges[edge][source_var_out]['expression']=symbols(G.nodes[source][source_var_out]['propertyName'])
+            if 'propertyName' in G.nodes[source][source_var_out].keys():                    
+                G.edges[edge][source_var_out]['expression']=symbols(G.nodes[source][source_var_out]['propertyName'])
             elif 'expression' in G.nodes[source][source_var_out].keys():
-                if 'expression' in G.edges[edge][source_var_out].keys():
-                    if G.nodes[source][source_var_out]['expression']!=G.edges[edge][source_var_out]['expression']:
-                        raise ValueError(f'The {source_var_out} of the port {source} is not consistent with the PowerBond')
-                else:
-                    G.edges[edge][source_var_out]['expression']=G.nodes[source][source_var_out]['expression']
+                G.edges[edge][source_var_out]['expression']=G.nodes[source][source_var_out]['expression']
             else:
                 raise ValueError(f'The {source_var_out} of the port {source} is unknown.')
             if G.nodes[target][source_var_out] is None: 
                 G.nodes[target][source_var_out]={}
-            if 'expression' in G.nodes[target][source_var_out].keys():
-                if G.nodes[target][source_var_out]['expression']!=G.edges[edge][source_var_out]['expression']:
-                    raise ValueError(f'The {source_var_out} of the port {target} is not consistent with the PowerBond')
-            else:
-                G.nodes[target][source_var_out]['expression']=G.edges[edge][source_var_out]['expression']       
+            G.nodes[target][source_var_out]['expression']=G.edges[edge][source_var_out]['expression']       
         if G.nodes[target][target_var_out] is not None:
             if G.edges[edge][target_var_out] is None:
                 G.edges[edge][target_var_out]={}
-            if 'propertyName' in G.nodes[target][target_var_out].keys():
-                if 'expression' in G.edges[edge][target_var_out].keys():
-                    if symbols(G.nodes[target][target_var_out]['propertyName'])!=G.edges[edge][target_var_out]['expression']:
-                        raise ValueError(f'The {target_var_out} of the port {target} is not consistent with the PowerBond')
-                else:                    
-                    G.edges[edge][target_var_out]['expression']=symbols(G.nodes[target][target_var_out]['propertyName'])
+            if 'propertyName' in G.nodes[target][target_var_out].keys():                    
+                G.edges[edge][target_var_out]['expression']=symbols(G.nodes[target][target_var_out]['propertyName'])
             elif 'expression' in G.nodes[target][target_var_out].keys():
-                if 'expression' in G.edges[edge][target_var_out].keys():
-                    if G.nodes[target][target_var_out]['expression']!=G.edges[edge][target_var_out]['expression']:
-                        raise ValueError(f'The {target_var_out} of the port {target} is not consistent with the PowerBond')
-                else:
-                    G.edges[edge][target_var_out]['expression']=G.nodes[target][target_var_out]['expression']
+                G.edges[edge][target_var_out]['expression']=G.nodes[target][target_var_out]['expression']
             else:
                 raise ValueError(f'The {target_var_out} of the port {target} is unknown.')
             if G.nodes[source][target_var_out] is None:
                 G.nodes[source][target_var_out]={}
-            if 'expression' in G.nodes[source][target_var_out].keys():
-                if G.nodes[source][target_var_out]['expression']!=G.edges[edge][target_var_out]['expression']:
-                    raise ValueError(f'The {target_var_out} of the port {source} is not consistent with the PowerBond')
-            else:
-                G.nodes[source][target_var_out]['expression']=G.edges[edge][target_var_out]['expression']
+            G.nodes[source][target_var_out]['expression']=G.edges[edge][target_var_out]['expression']
 
     if G.nodes[source][source_var_out] is None and G.nodes[target][target_var_out] is None:
         return False
@@ -330,7 +305,7 @@ def viaPowerbond(G,edge):
 
 def viaJunction(G,nodeJunction):
     """
-    This function is used to propagate the energy through the 0 or 1 Junction
+    Propagate the energy through the 0 or 1 Junction
 
     Parameters
     ----------
@@ -403,7 +378,7 @@ def viaJunction(G,nodeJunction):
 
 def viaTransformer(G,TF):
     """
-    This function is used to propagate the energy through the Transformer
+    Propagate the energy through the Transformer
 
     Parameters
     ----------
@@ -431,7 +406,14 @@ def viaTransformer(G,TF):
     direction_1=checkBondDirection(G,port_1)
     causality_0=G.nodes[port_0]['causality']
     causality_1=G.nodes[port_1]['causality']
-    param_value = sympify(G.nodes[TF]['modelParameter']['param_1']['propertyValue'])
+    param_value=1
+    for param in G.nodes[TF]['modelParameter']:
+        if 'value' in G.nodes[TF]['modelParameter'][param]:
+            param_value=param_value*float(G.nodes[TF]['modelParameter'][param]['value'])
+        elif 'propertyName' in G.nodes[TF]['modelParameter'][param]:
+            param_value=param_value*symbols(G.nodes[TF]['modelParameter'][param]['propertyName'])
+        else:
+            raise ValueError ('parameter is undefined')
     if direction_0!=direction_1:
         if G.nodes[port_0][causality_0] is None and G.nodes[port_1][causality_0] is not None:
             G.nodes[port_0][causality_0]={}
@@ -455,7 +437,7 @@ def viaTransformer(G,TF):
 
 def viaGyrator(G,GY):
     """
-    This function is used to propagate the energy through the Gyrator
+    Propagate the energy through the Gyrator
 
     Parameters
     ----------
@@ -475,7 +457,6 @@ def viaGyrator(G,GY):
     The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Gyrator
     
     """
-
     ports=getPowerPorts(G,GY)
     port_0=ports[0]
     port_1=ports[1]
@@ -506,6 +487,22 @@ def viaGyrator(G,GY):
     return True
 
 def checkBondDirection(G,port):
+    """
+    Check the direction of the bond connected to the port
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+    port : str
+        The name of the port
+
+    Returns
+    -------
+    direction : str
+        The direction of the bond, either 'in' or 'out'
+
+    """
     if any(data.get('a') == 'PowerBond' for u, v, data in G.out_edges(port,data=True)):
         direction='out'
     elif any(data.get('a') == 'PowerBond' for u, v, data in G.in_edges(port,data=True)):
@@ -515,6 +512,25 @@ def checkBondDirection(G,port):
     return direction          
 
 def nxBG_Energy(G):
+    """
+    Propagate the energy through the bond graph
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+        Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
+        Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
+
+    Returns
+    -------
+    None
+
+    side effects
+    ------------
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the bond graph
+    
+    """
 
     for edge in G.edges:
         if 'a' in G.edges[edge].keys() and G.edges[edge]['a']=='PowerBond':
@@ -559,144 +575,12 @@ def nxBG_Energy(G):
                 raise ValueError(f'The effort of {node} is None')
             if G.nodes[node]['flow'] is None:
                 raise ValueError(f'The flow of {node} is None')
-
-def nxBG_preCellML(G):
-    input_vars=[]
-    output_vars=[]
-    conservation_laws={}
-    for node in G.nodes:
-        if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement':
-            if G.nodes[node]['causality']=='flow':
-                input_vars.append(G.nodes[node]['flow']['propertyName'])
-                output_var='e_'+node
-                output_vars.append(output_var)
-                conservation_laws.update({output_var:G.nodes[node]['effort']['expression']})
-            elif G.nodes[node]['causality']=='effort':
-                input_vars.append(G.nodes[node]['effort']['propertyName'])
-                output_var='f_'+node
-                output_vars.append(output_var)
-                conservation_laws.update({output_var:G.nodes[node]['flow']['expression']})
-    return input_vars, output_vars, conservation_laws        
-
-def save_nxBG_json(G, filename='nx_BG.json'):
-    with open(filename, 'w') as f:
-        json.dump(json_graph.node_link_data(G,edges="edges"), f, indent=4)
-
-def load_nxBG_json(filename):
-    with open(filename, 'r') as f:
-        data = json.load(f)
-    G = json_graph.node_link_graph(data, edges="edges", directed=True)
-    return G
-
-def pyvis_BG(G):
-    pyvis_net = Network(cdn_resources='in_line', directed=True)
-    pyvis_net.from_nx(G)
-    return pyvis_net
-
-def pyvis_net_fomat(pyvis_net):
-    """
-    This function is used to format the bond graph (pyvis_net) for visualization
-        
-    """ 
-    for node in pyvis_net.nodes:
-        if 'a' in node.keys():
-            if node['a']=='BondElement':
-                node['shape']='box'
-                node['size']=20
-                node['color']={'background':'cyan'}
-                node['group']='BondElement'
-            elif node['a']=='JunctionStructure':
-                node['size']=5
-                if node['subClass']=='ZeroJunctionStructure':
-                    node['shape']='dot'
-                    node['color']={'background':'blue'}
-                elif node['subClass']=='OneJunctionStructure':
-                    node['shape']='dot'
-                    node['color']={'background':'black'}
-                elif node['subClass']=='TF' or node['subClass']=='MTF':
-                    node['shape']='square'
-                    node['color']={'background':'yellow'}
-                elif node['subClass']=='GY' or node['subClass']=='MGY':
-                    node['shape']='square'
-                    node['color']={'background':'blue'}
-            elif node['a']=='PowerPort':
-                node['shape']='diamond'
-                node['size']=5
-                node['color']={'background':'white'}
-                node['group']='PowerPort'
-            elif node['a']=='SignalPort':
-                node['shape']='hexagon'
-                node['size']=5
-                node['color']={'background':'black'}
-            node['label']=node['id']
-            node['font']={'size':10} 
-    for edge in pyvis_net.edges:
-        if 'a' in edge.keys():
-            if edge['a']=='PowerBond':
-                edge['color']={'color':'blue'}
-                edge['length']=100
-                edge['width']=2
-            elif edge['a']=='SignalBond':
-                edge['color']={'color':'black'}
-        else:
-            edge['dashes']='true'
-            edge['color']={'color':'gray'}
-            edge['length']=10
-            edge['width']=1
-
-
-
-def nxBG_pyvis_net(pyvis_net, filename='nx_BG.html'):
-    pyvis_net.set_options("""
-        var options = {
-            "edges": {
-                "smooth": true,
-                "width": 2
-            },
-            "physics": {
-                "enabled": true,
-                "barnesHut": {
-                  "gravitationalConstant": -20000,
-                  "centralGravity": 0.8,
-                  "springLength": 100,  
-                  "springConstant": 0.8
-                },
-                "repulsion": {
-                  "nodeDistance": 20, 
-                  "springLength": 20    
-                },
-                "hierarchicalRepulsion": {
-                  "nodeDistance": 10,
-                  "springLength": 5 
-                },
-                "minVelocity": 0.75
-            }
-        }
-    """)
-   # Generate the HTML content
-    html_content = pyvis_net.generate_html()
-
-    # Remove the div with class "card"
-    html_content = html_content.replace('<div class="card" style="width: 100%">', '').replace('<div id="mynetwork" class="card-body">', '<div id="mynetwork">').replace('</div>', '', 1)
-
-    # Ensure the graph takes the whole page
-    html_content = html_content.replace('<div id="mynetwork">', '<div id="mynetwork" style="width: 100%; height: 100vh;">')
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-def save_nxBG_pyvis_net(G, filename='nx_BG.html'):
-
-    pyvis_net = pyvis_BG(G)
-    pyvis_net_fomat(pyvis_net)
-    nxBG_pyvis_net(pyvis_net, filename)
-
+    return     
 
 if __name__ == "__main__": 
-    import webbrowser
+    
     import os
     G=nx.DiGraph()
-    # Get the default web browser
-    browser = webbrowser.get()
     path_='./data/'
     fmatrix='./data/SLC5_f.csv'
     rmatrix='./data/SLC5_r.csv'
@@ -704,8 +588,7 @@ if __name__ == "__main__":
     nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
     
     save_nxBG_json(G, path_+'nx_BG_0.json')
-    save_nxBG_pyvis_net(G, path_+'nx_BG_0.html')
-    browser.open(os.path.abspath(path_ + 'nx_BG_0.html'))   
+    save_nxBG_html(G, path_+'nx_BG_0.html')
     
     nxBG_addJunctions(G)
 
@@ -714,21 +597,13 @@ if __name__ == "__main__":
     nxBG_Energy(G)
 
     save_nxBG_json(G, path_+'nx_BG_Energy.json')
-    save_nxBG_pyvis_net(G, path_+'nx_BG_Energy.html')
+    save_nxBG_html(G, path_+'nx_BG_Energy.html')
     
-    browser.open(os.path.abspath(path_ + 'nx_BG_Energy.html')) 
     G_1=load_nxBG_json(path_+'nx_BG_Energy_1.json') 
 
     G2=nx.compose(G,G_1)
     nxBG_addJunction(G2)
     save_nxBG_json(G2, path_+'nx_BG_Energy_2.json')
-    save_nxBG_pyvis_net(G2, path_+'nx_BG_Energy_2.html')
-    browser.open(os.path.abspath(path_ + 'nx_BG_Energy_2.html'))
+    save_nxBG_html(G2, path_+'nx_BG_Energy_2.html')
 
-    input_vars, output_vars, conservation_laws=nxBG_preCellML(G)
-    print('Input variables:', input_vars)
-    print('Output variables:', output_vars)
-    print('Conservation laws:')
-    for output_var, expression in conservation_laws.items():
-        print(f'{output_var} = {expression}')
     
