@@ -48,7 +48,7 @@ def _checkPortDirection(G,port):
         raise ValueError('The direction is not correct')
     return direction
 
-def nxBG_refine_component(G,bondElement,bgComponents=None):
+def nxBG_refine_component(G,bondElement,bgComponents):
     """
     Refine the components in the bond graph
 
@@ -72,121 +72,93 @@ def nxBG_refine_component(G,bondElement,bgComponents=None):
     The constitutive relations are added if the bond element has any
     The orientation of the power ports are checked and updated if necessary
     """
-    def check_sharedVar(G,bondElement,powerPorts, causality):        
-        output_var_0=f'{causality[0]}_{powerPorts[0].split("_")[-1]}'
-        output_var_1=f'{causality[0]}_{powerPorts[1].split("_")[-1]}'
-        for expr in G.nodes[bondElement]['hasConstitutiveRelation']:
-            var_=solve(expr, symbols(output_var_0))
-            if len(var_)==1 and var_[0]==symbols(output_var_1):
-                return True
-        return False   
+    def check_sharedVar(G,bondElement,powerPorts, causality): 
+        if len(powerPorts)==1:
+            return True
+        elif len(powerPorts)>=2:       
+            output_var_0=f'{causality[0]}_{powerPorts[0].split("_")[-1]}'
+            output_var_1=f'{causality[0]}_{powerPorts[1].split("_")[-1]}'
+            for expr in G.nodes[bondElement]['hasConstitutiveRelation']:
+                var_=solve(expr, symbols(output_var_0))
+                if len(var_)==1 and var_[0]==symbols(output_var_1):
+                    return True
+            return False   
            
     powerPorts=getPowerPorts(G,bondElement)
-    if bgComponents is None: # This is the case when the components are already implemented in the CellML and we combine them to build the bond graph
-        if 'modelParameter' in G.nodes[bondElement].keys():
-            for key in G.nodes[bondElement]['modelParameter']:
-                if 'symbol' in G.nodes[bondElement]['modelParameter'][key].keys():
-                    G.nodes[bondElement]['modelParameter'][key]['propertyName']=G.nodes[bondElement]['modelParameter'][key]['symbol']+'_'+bondElement
-        if 'modelState' in G.nodes[bondElement].keys():
-            for key in G.nodes[bondElement]['modelState']: 
-                if 'symbol' in G.nodes[bondElement]['modelState'][key].keys():
-                    G.nodes[bondElement]['modelState'][key]['propertyName']=G.nodes[bondElement]['modelState'][key]['symbol']+'_'+bondElement
-        for powerPort in powerPorts:
-            if len(powerPorts)==1:
-                if 'symbol' in G.nodes[powerPort]['effort'].keys() and len(powerPorts)==1:
-                    G.nodes[powerPort]['effort']['propertyName']=G.nodes[powerPort]['effort']['symbol']+'_'+bondElement
-                if 'symbol' in G.nodes[powerPort]['flow'].keys() and len(powerPorts)==1:
-                    G.nodes[powerPort]['flow']['propertyName']=G.nodes[powerPort]['flow']['symbol']+'_'+bondElement
+    bg_domain_dict={}
+    bg_comp_dict={}
+    for key in bgComponents:
+        if bgComponents[key]['domain'] == G.nodes[bondElement]['domain']:
+            bg_domain_dict=bgComponents[key]
+            break    
+    if len(bg_domain_dict)==0:
+        raise ValueError('The domain is unspecified!')
+    else:
+        for component in bg_domain_dict['components'].values():
+            if G.nodes[bondElement]['subClass']==component['metamodel']:
+                bg_comp_dict=copy.deepcopy(component)
+                break
+    if len(bg_comp_dict)==0:
+        raise ValueError('The component is not found!')
+    if 'params' in bg_comp_dict:
+        G.nodes[bondElement]['modelParameter']=copy.deepcopy(bg_comp_dict['params'])
+        for param in bg_comp_dict['params']:
+            quantity=G.nodes[bondElement]['modelParameter'][param]
+            if ('physical constants' in bg_domain_dict and param in bg_domain_dict['physical constants'].keys()) or ('thermodynamic parameters' in bg_domain_dict and param in bg_domain_dict['thermodynamic parameters'].keys()):               
+                quantity['propertyName']=quantity['symbol']
             else:
-                if 'symbol' in G.nodes[powerPort]['effort'].keys():
-                    G.nodes[powerPort]['effort']['propertyName']=G.nodes[powerPort]['effort']['symbol']+'_'+powerPort
-                if 'symbol' in G.nodes[powerPort]['flow'].keys():
-                    G.nodes[powerPort]['flow']['propertyName']=G.nodes[powerPort]['flow']['symbol']+'_'+powerPort
-    else: # This is the case when the components are not implemented in the CellML and we need to refine them based on the templates
-        bg_domain_dict={}
-        bg_comp_dict={}
-
-        for key in bgComponents:
-            if bgComponents[key]['domain'] == G.nodes[bondElement]['domain']:
-                bg_domain_dict=bgComponents[key]
-                break    
-        if len(bg_domain_dict)==0:
-            raise ValueError('The domain is unspecified!')
-        else:
-            for component in bg_domain_dict['components'].values():
-                if G.nodes[bondElement]['subClass']==component['metamodel']:
-                    bg_comp_dict=copy.deepcopy(component)
-                    break
-        if len(bg_comp_dict)==0:
-            raise ValueError('The component is not found!')
-
-        if 'params' in bg_comp_dict:
-            G.nodes[bondElement]['modelParameter']=copy.deepcopy(bg_comp_dict['params'])
-            for param in bg_comp_dict['params']:
-                if ('physical constants' in bg_domain_dict and param in bg_domain_dict['physical constants'].keys()) or ('thermodynamic parameters' in bg_domain_dict and param in bg_domain_dict['thermodynamic parameters'].keys()):
-                    G.nodes[bondElement]['modelParameter'][param]['propertyName']=bg_comp_dict['params'][param]['symbol']
-                else:
-                    G.nodes[bondElement]['modelParameter'][param]['propertyName']=bg_comp_dict['params'][param]['symbol']+'_'+bondElement
-                    G.nodes[bondElement]['modelParameter'][param]['symbol']=G.nodes[bondElement]['modelParameter'][param]['propertyName']
-        if 'constitutive_relations' in bg_comp_dict:
-            G.nodes[bondElement]['hasConstitutiveRelation']=[]
-            G.nodes[bondElement]['hasConstitutiveRelation']=copy.deepcopy(bg_comp_dict['constitutive_relations'])
-        if  G.nodes[bondElement]['subClass']=='C' or G.nodes[bondElement]['subClass']=='MC' or G.nodes[bondElement]['subClass']=='E' or G.nodes[bondElement]['subClass']=='ME':
-            G.nodes[bondElement]['modelState']={}
-            G.nodes[bondElement]['modelState']['q_0']=copy.deepcopy(bg_domain_dict['generalized displacement'])
-            G.nodes[bondElement]['modelState']['q_0']['propertyName']=bg_domain_dict['generalized displacement']['symbol']+'_'+bondElement
-            G.nodes[bondElement]['modelState']['q_0']['symbol']=G.nodes[bondElement]['modelState']['q_0']['propertyName']
-        if  G.nodes[bondElement]['subClass']=='I' or G.nodes[bondElement]['subClass']=='MI':
-            G.nodes[bondElement]['modelState']={}
-            G.nodes[bondElement]['modelState']['p_0']=copy.deepcopy(bg_domain_dict['generalized momentum'])
-            G.nodes[bondElement]['modelState']['p_0']['propertyName']=bg_domain_dict['generalized momentum']['symbol']+'_'+bondElement
-            G.nodes[bondElement]['modelState']['p_0']['symbol']=G.nodes[bondElement]['modelState']['p_0']['propertyName']
-        if  G.nodes[bondElement]['subClass']=='IC' or G.nodes[bondElement]['subClass']=='MIC' or G.nodes[bondElement]['subClass']=='IE' or G.nodes[bondElement]['subClass']=='MIE':
-            G.nodes[bondElement]['modelState']={}
-            G.nodes[bondElement]['modelState']['q_0']=copy.deepcopy(bg_domain_dict['generalized displacement'])
-            G.nodes[bondElement]['modelState']['q_0']['propertyName']=bg_domain_dict['generalized displacement']['symbol']+'_'+bondElement
-            G.nodes[bondElement]['modelState']['q_0']['symbol']=G.nodes[bondElement]['modelState']['q_0']['propertyName']
-            G.nodes[bondElement]['modelState']['p_1']=copy.deepcopy(bg_domain_dict['generalized momentum'])           
-            G.nodes[bondElement]['modelState']['p_1']['propertyName']=bg_domain_dict['generalized momentum']['symbol']+'_'+bondElement
-            G.nodes[bondElement]['modelState']['p_1']['symbol']=G.nodes[bondElement]['modelState']['p_1']['propertyName']
-
-        if len(powerPorts)!=len(bg_comp_dict["ports"]):
-            raise ValueError('The number of ports does not match.') 
-        else:
-            for powerPort in powerPorts:
-                powerPortN=powerPort.split('_')[-1] # The format of the power port is 'bondElement_powerPortN'
-                G.nodes[powerPort]['effort']=copy.deepcopy(bg_domain_dict['effort'])
-                G.nodes[powerPort]['flow']=copy.deepcopy(bg_domain_dict['flow'])
-                if len(powerPorts)==1:
-                    G.nodes[powerPort]['effort']['propertyName']=bg_domain_dict['effort']['symbol']+'_'+bondElement
-                    G.nodes[powerPort]['flow']['propertyName']=bg_domain_dict['flow']['symbol']+'_'+bondElement
-                    G.nodes[powerPort]['effort']['symbol']=G.nodes[powerPort]['effort']['propertyName']
-                    G.nodes[powerPort]['flow']['symbol']=G.nodes[powerPort]['flow']['propertyName']
-                else:
-                    if check_sharedVar(G,bondElement,powerPorts,'effort'):
-                        G.nodes[powerPort]['effort']['propertyName']=bg_domain_dict['effort']['symbol']+'_'+bondElement
-                    else:
-                        G.nodes[powerPort]['effort']['propertyName']=bg_domain_dict['effort']['symbol']+'_'+powerPort
-                    if check_sharedVar(G,bondElement,powerPorts,'flow'):
-                        G.nodes[powerPort]['flow']['propertyName']=bg_domain_dict['flow']['symbol']+'_'+bondElement
-                    else:
-                        G.nodes[powerPort]['flow']['propertyName']=bg_domain_dict['flow']['symbol']+'_'+powerPort
-                    
-                    G.nodes[powerPort]['effort']['symbol']=G.nodes[powerPort]['effort']['propertyName']
-                    G.nodes[powerPort]['flow']['symbol']=G.nodes[powerPort]['flow']['propertyName']
-
-                if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
-                    pass
-                elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
-                    for u, v, data in G.out_edges(bondElement,data=True):
-                        G.remove_edge(u, v)
-                        G.add_edge(v,u,**data)
-                elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
-                    for u, v, data in G.in_edges(bondElement,data=True):
-                        G.remove_edge(u, v)
-                        G.add_edge(v,u,**data) 
-                else:
-                     raise ValueError('The orientation does not match.')    
+                quantity['propertyName']=quantity['symbol']+'_'+bondElement
+    if 'constitutive_relations' in bg_comp_dict:
+        G.nodes[bondElement]['hasConstitutiveRelation']=[]
+        G.nodes[bondElement]['hasConstitutiveRelation']=copy.deepcopy(bg_comp_dict['constitutive_relations'])
+    if  G.nodes[bondElement]['subClass']=='C' or G.nodes[bondElement]['subClass']=='MC' or G.nodes[bondElement]['subClass']=='E' or G.nodes[bondElement]['subClass']=='ME':
+        G.nodes[bondElement]['modelState']={}
+        G.nodes[bondElement]['modelState']['q_0']=copy.deepcopy(bg_domain_dict['generalized displacement'])
+        quantity=G.nodes[bondElement]['modelState']['q_0']
+        quantity['propertyName']=quantity['symbol']+'_'+bondElement
+    if  G.nodes[bondElement]['subClass']=='I' or G.nodes[bondElement]['subClass']=='MI':
+        G.nodes[bondElement]['modelState']={}
+        G.nodes[bondElement]['modelState']['p_0']=copy.deepcopy(bg_domain_dict['generalized momentum'])
+        quantity=G.nodes[bondElement]['modelState']['p_0']
+        quantity['propertyName']=quantity['symbol']+'_'+bondElement
+    if  G.nodes[bondElement]['subClass']=='IC' or G.nodes[bondElement]['subClass']=='MIC' or G.nodes[bondElement]['subClass']=='IE' or G.nodes[bondElement]['subClass']=='MIE':
+        G.nodes[bondElement]['modelState']={}
+        G.nodes[bondElement]['modelState']['q_0']=copy.deepcopy(bg_domain_dict['generalized displacement'])
+        quantity=G.nodes[bondElement]['modelState']['q_0']
+        quantity['propertyName']=quantity['symbol']+'_'+bondElement
+        G.nodes[bondElement]['modelState']['p_1']=copy.deepcopy(bg_domain_dict['generalized momentum'])           
+        quantity2=G.nodes[bondElement]['modelState']['p_1']
+        quantity2['propertyName']=quantity2['symbol']+'_'+bondElement
+    if len(powerPorts)!=len(bg_comp_dict["ports"]):
+        raise ValueError('The number of ports does not match.') 
+    else:
+        for powerPort in powerPorts:
+            powerPortN=powerPort.split('_')[-1] # The format of the power port is 'bondElement_powerPortN'
+            G.nodes[powerPort]['effort']=copy.deepcopy(bg_domain_dict['effort'])
+            G.nodes[powerPort]['flow']=copy.deepcopy(bg_domain_dict['flow'])
+            effort=G.nodes[powerPort]['effort']
+            flow=G.nodes[powerPort]['flow']
+            if check_sharedVar(G,bondElement,powerPorts,'effort'):
+                effort['propertyName']=effort['symbol']+'_'+bondElement
+            else:
+                effort['propertyName']=effort['symbol']+'_'+powerPort
+            if check_sharedVar(G,bondElement,powerPorts,'flow'):
+                flow['propertyName']=flow['symbol']+'_'+bondElement
+            else:
+                flow['propertyName']=flow['symbol']+'_'+powerPort
+            # check the orientation of the power port
+            if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
+                pass
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
+                for u, v, data in G.out_edges(bondElement,data=True):
+                    G.remove_edge(u, v)
+                    G.add_edge(v,u,**data)
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
+                for u, v, data in G.in_edges(bondElement,data=True):
+                    G.remove_edge(u, v)
+                    G.add_edge(v,u,**data) 
+            else:
+                 raise ValueError('The orientation does not match.')    
 
 def nxBG_refine_components(G,bgComponents):
     
@@ -216,7 +188,7 @@ def update_expr(expr,var_dict):
             expr=expr.subs(symbols(ikey),symbols(var_dict[ikey]['propertyName']))
     return expr
 
-def nxBG_refine_constitutive_relations(G,voi={'propertyName': 't'}):
+def nxBG_refine_constitutive_relations(G):
 
     """
     Refine the constitutive relations in the bond graph
@@ -227,10 +199,7 @@ def nxBG_refine_constitutive_relations(G,voi={'propertyName': 't'}):
     Parameters
     ----------
     G : nx.DiGraph
-        The bond graph built using networkx
-    voi : dict
-        The variable of integration, which is the time in this case
-        voi={'propertyName': 't'}        
+        The bond graph built using networkx       
     """
 
     for node in G.nodes: 
@@ -254,7 +223,7 @@ def nxBG_refine_constitutive_relations(G,voi={'propertyName': 't'}):
                     expr=update_expr(expr,var_dict)
                     LHS_name=var_dict[yvar]['propertyName']
                     if LHS_name not in G.nodes[node]['constitutive_eqs'].keys():
-                        G.nodes[node]['constitutive_eqs'][LHS_name]=(ccode(expr), voi['propertyName'])
+                        G.nodes[node]['constitutive_eqs'][LHS_name]=(ccode(expr), 't')
                 else:
                     expr=sympify(str_expr)
                     for powerPort in powerPorts:
@@ -285,6 +254,6 @@ if __name__ == "__main__":
     nx_BG_file = './data/nx_BG_energy.json'
     save_nxBG_json(G, nx_BG_file)
     voi={'propertyName': 't', 'units': 'second'}
-    nxBG_refine_constitutive_relations(G,voi)   
+    nxBG_refine_constitutive_relations(G)   
     nx_BG_file = './data/nx_BG_constitutive_energy.json'
     save_nxBG_json(G, nx_BG_file)
