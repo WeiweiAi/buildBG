@@ -1,0 +1,7 @@
+{
+    "e": "electrical",
+    "m": "mechanical",
+    "hyd": "hydraulic",
+    "bio": "biochemical",
+    "bio-e": "biochemical-electrical"
+}

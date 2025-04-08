@@ -56,8 +56,7 @@ def save_json(comp_dict, json_file):
 def load_matrix(matrix):
     """
     Load stoichiometric matrix from a csv file
-    The components are defined in BG_components.
-    The ID of the components is the key of the dictionary BG_components.
+    The ID is metamodel of the BG components.
     The components in the row take the potential as the input and the flow as the output, and we call them F components.
     The components in the column take the flow as the input and the potential as the output, and we call them E components.
     The csv file should have the following format (* means blank):
@@ -116,6 +115,78 @@ def load_matrix(matrix):
     
     return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
+def load_matrix_domain(matrix):
+    """
+    Load stoichiometric matrix from a csv file
+    The ID is metamodel of the BG components.
+    The components in the row take the potential as the input and the flow as the output, and we call them F components.
+    The components in the column take the flow as the input and the potential as the output, and we call them E components.
+    The csv file should have the following format (* means blank):
+    *      *       *     *      domain domain
+    *      *       *     *      fName fName
+    *      *       *     *       fID   fID
+    *      *       *     *      fPort fPort
+    domain  eName  eID  ePort      0    1 
+    domain  eName  eID  ePort      1    0
+    
+    Parameters
+    ----------
+    matrix : str
+        The file path of the stoichiometric matrix
+    
+    Returns
+    -------
+    eDomain : list
+        A list of E component (e_out, f_in) domains
+    eName : list
+        A list of E component (e_out, f_in) names
+    eID : list
+        A list of E component (e_out, f_in) type IDs
+    ePort : list
+        A list of E component (e_out, f_in) port number
+    fDomain : list
+        A list of F component (e_in, f_out) domains
+    fName : list
+        A list of F component (e_in, f_out) names
+    fID : list
+        A list of F component (e_in, f_out) IDs
+    fPort : list
+        A list of F component (e_in, f_out) port number
+    N : numpy.ndarray
+        The stoichiometric matrix
+    """
+    startC=4
+    N = []
+    eDomain=[]
+    eName=[]
+    eID=[]
+    ePort=[]
+    with open(matrix,'r') as f:
+        reader = csv.reader(f,delimiter=',')
+        line_count = 0
+        for row in reader:
+            if line_count ==0:
+                fDomain=row[startC:]
+                line_count += 1
+            elif line_count ==1:
+                fName=row[startC:]
+                line_count += 1
+            elif line_count == 2:
+                fID=row[startC:]
+                line_count += 1
+            elif line_count == 3:
+                fPort=row[startC:]
+                line_count += 1
+            else:
+                N.append(row[startC:])
+                eDomain.append(row[0])
+                eName.append(row[1])
+                eID.append(row[2])
+                ePort.append(row[3])
+        f.close()
+    
+    return eDomain, eName, eID, ePort, fDomain, fName, fID, fPort, np.array(N).astype(int)
+
 def infix_to_mathml(ode_var,infix, voi='',version='1.1'):
     """
     Convert the infix string to mathML string defined in CellML specification
@@ -155,9 +226,10 @@ def infix_to_mathml(ode_var,infix, voi='',version='1.1'):
     mathstr = mathstr.replace ('<?xml version="1.0" encoding="UTF-8"?>', '')
     # temporary solution to add cellml units for constant in the mathML string, replace <cn type="integer"> to <cn cellml:units="dimensionless">
     # check if <cn type="integer"> is in the mathML string
-    if '<cn type="integer">' in mathstr or '<cn type="real">' in mathstr:
+    if '<cn type="integer">' in mathstr or '<cn type="real">' in mathstr or '<cn>' in mathstr:
         mathstr = mathstr.replace ('<cn type="integer">', '<cn cellml:units="dimensionless">')
         mathstr = mathstr.replace ('<cn type="real">', '<cn cellml:units="dimensionless">')
+        mathstr = mathstr.replace ('<cn>', '<cn cellml:units="dimensionless">')
         # add left side of the equation       
     mathstr = preforumla + mathstr + postformula
     # add the cellml namespace to the mathML string

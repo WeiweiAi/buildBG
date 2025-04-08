@@ -6,20 +6,15 @@ import json
 This module is used to refine the bond graph model in the networkx format
 The BondElement are refined based on the templates in the JSON file (./components/BG_components.json)
 """
-def nxBG_refine_domain(G):
+
+def nxBG_refine_domain(G,BG_domain):
     """
-    Specify the domain of the BondElement based on user inputs
+    Refine the domain of the BondElement and multiJunction in the bond graph 
     
     """
-    BondElement_domain = ['electrical', 'mechanical', 'hydraulic', 'biochemical']
-    # print the subclass with the numberings
-    for idx, domain in enumerate(BondElement_domain, start=1):
-        print(f"{idx}. {domain}")
     for node in G.nodes:
-        if G.nodes[node]['a']=='BondElement' and 'domain' not in G.nodes[node].keys():
-            print(f"The element: {node} belongs to domain:")
-            subclass = input()
-            G.nodes[node]['domain'] = BondElement_domain[int(subclass)-1]
+        if G.nodes[node]['a']=='BondElement' or (G.nodes[node]['a']=='JunctionStructure' and (G.nodes[node]['subClass']=='TF' or G.nodes[node]['subClass']=='GY')):
+           G.nodes[node]['domain']=BG_domain[G.nodes[node]['domain']]
 
 def _checkPortDirection(G,port):
     """
@@ -160,6 +155,74 @@ def nxBG_refine_component(G,bondElement,bgComponents):
             else:
                  raise ValueError('The orientation does not match.')    
 
+def nxBG_refine_multiJunc(G,multiJunc,bgComponents):
+    """
+    Refine the components in the bond graph
+
+    parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+    multiJunc : str
+        The name of the junction
+    bgComponents : dict
+        The dictionary of the bond graph components (template)
+
+    returns
+    -------
+    none
+
+    side effects
+    ------------
+    The modelParameter the junction are updated
+    The power ports are updated with the propertyName and symbol
+    The constitutive relations are added if the junction has any
+
+    """
+    powerPorts=getPowerPorts(G,multiJunc)
+    bg_domain_dict={}
+    bg_comp_dict={}
+    for key in bgComponents:
+        if bgComponents[key]['domain'] == G.nodes[multiJunc]['domain']:
+            bg_domain_dict=bgComponents[key]
+            break    
+    if len(bg_domain_dict)==0:
+        raise ValueError('The domain is unspecified!')
+    else:
+        for component in bg_domain_dict['components'].values():
+            if G.nodes[multiJunc]['subClass']==component['metamodel']:
+                bg_comp_dict=copy.deepcopy(component)
+                break
+    if len(bg_comp_dict)==0:
+        raise ValueError('The component is not found!')
+    if 'params' in bg_comp_dict and 'modelParameter' not in G.nodes[multiJunc].keys():
+        G.nodes[multiJunc]['modelParameter']={}
+        G.nodes[multiJunc]['modelParameter']=copy.deepcopy(bg_comp_dict['params'])
+        for param in bg_comp_dict['params']:
+            quantity=G.nodes[multiJunc]['modelParameter'][param]
+            if ('physical constants' in bg_domain_dict and param in bg_domain_dict['physical constants'].keys()) or ('thermodynamic parameters' in bg_domain_dict and param in bg_domain_dict['thermodynamic parameters'].keys()):               
+                quantity['propertyName']=quantity['symbol']
+            else:
+                quantity['propertyName']=quantity['symbol']+'_'+multiJunc
+    if len(powerPorts)!=len(bg_comp_dict["ports"]):
+        raise ValueError('The number of ports does not match.') 
+    else:
+        for powerPort in powerPorts:
+            powerPortN=powerPort.split('_')[-1]
+             # check the orientation of the power port
+            if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
+                pass
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
+                for u, v, data in G.out_edges(multiJunc,data=True):
+                    G.remove_edge(u, v)
+                    G.add_edge(v,u,**data)
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
+                for u, v, data in G.in_edges(multiJunc,data=True):
+                    G.remove_edge(u, v)
+                    G.add_edge(v,u,**data) 
+            else:
+                 raise ValueError('The orientation does not match.')   
+            
 def nxBG_refine_components(G,bgComponents):
     
     """
@@ -179,6 +242,8 @@ def nxBG_refine_components(G,bgComponents):
     for node in G.nodes:
         if G.nodes[node]['a']=='BondElement':
             nxBG_refine_component(G,node,bgComponents)
+        elif G.nodes[node]['a']=='JunctionStructure' and (G.nodes[node]['subClass']=='TF' or G.nodes[node]['subClass']=='GY'):
+            nxBG_refine_multiJunc(G,node,bgComponents)
 
 def update_expr(expr,var_dict):
     for ikey,ivar in var_dict.items():
@@ -203,7 +268,7 @@ def nxBG_refine_constitutive_relations(G):
     """
 
     for node in G.nodes: 
-        if G.nodes[node]['a']=='BondElement' and 'hasConstitutiveRelation' in G.nodes[node].keys():
+        if 'hasConstitutiveRelation' in G.nodes[node].keys():
             G.nodes[node]['constitutive_eqs']={}
             var_dict={}
             powerPorts=getPowerPorts(G,node)
@@ -245,7 +310,15 @@ if __name__ == "__main__":
     
     json_file = './components/BG_components.json'
     bgComponents = json.load(open(json_file))
+    BG_domain_file = './components/BG_domain.json'
+    BG_domain = json.load(open(BG_domain_file))
+    nx_BG_file = './data/nx_BG.json'
+    G = load_nxBG_json(nx_BG_file)
+    nxBG_refine_domain(G,BG_domain)
+    
     nx_BG_file = './data/nx_BG_domain.json'
+    save_nxBG_json(G, nx_BG_file)
+    
     G = load_nxBG_json(nx_BG_file)
     nxBG_refine_components(G,bgComponents)
     nx_BG_file = './data/nx_BG_refine.json'
@@ -253,7 +326,6 @@ if __name__ == "__main__":
     nxBG_Energy(G)
     nx_BG_file = './data/nx_BG_energy.json'
     save_nxBG_json(G, nx_BG_file)
-    voi={'propertyName': 't', 'units': 'second'}
     nxBG_refine_constitutive_relations(G)   
     nx_BG_file = './data/nx_BG_constitutive_energy.json'
     save_nxBG_json(G, nx_BG_file)

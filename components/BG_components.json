@@ -753,5 +753,69 @@
                 ]
             }
         }
+    },
+    "5": {
+        "description": "biochemical components",
+        "domain": "biochemical-electrical",
+        "physical constants": {
+            "F": {
+                "description": "Faraday's constant",
+                "value": 96485,
+                "units": "C_per_mol",
+                "symbol": "F"
+            }
+        },
+        "components": {
+            "zF": {
+                "description": "biochemical-electrical transformer",
+                "metamodel": "TF",
+                "ports": {
+                    "0": {
+                        "orientation": "in",
+                        "effort": {
+                            "description": "chemical potential",
+                            "units": "J_per_mol",
+                            "symbol": "mu"
+                        },
+                        "flow": {
+                            "description": "current",
+                            "units": "fA",
+                            "symbol": "i"
+                        }
+                    },
+                    "1": {
+                        "orientation": "out",
+                        "effort": {
+                            "description": "voltage",
+                            "units": "volt",
+                            "symbol": "u"
+                        },
+                        "flow": {
+                            "description": "molar flow",
+                            "units": "fmol_per_s",
+                            "symbol": "v"
+                        }
+                    }
+                },
+                "params": {
+                    "z": {
+                        "description": "Ratio",
+                        "value": 1,
+                        "units": "dimensionless",
+                        "symbol": "z"
+                    },
+                    "F": {
+                        "description": "Faraday's constant",
+                        "value": 96485,
+                        "units": "C_per_mol",
+                        "symbol": "F"
+                    }
+                },
+                "constitutive_relations": [
+                    "e_1 - z * F * e_0",
+                    "f_0 - z * F * f_1"
+                ]
+            }
+        }
     }
 }

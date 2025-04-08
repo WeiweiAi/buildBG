@@ -1,5 +1,6 @@
+from matplotlib.pylab import f
 import networkx as nx
-from utilities import load_matrix, save_nxBG_json, save_nxBG_html, load_nxBG_json
+from utilities import  load_matrix_domain, save_nxBG_json, save_nxBG_html, load_nxBG_json
 from sympy import *
 
 def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
@@ -25,12 +26,13 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
         Nodes: BondElement, JunctionStructure, PowerPort, SignalPort
         Edges: PowerBond, SignalBond, hasPowerPort, hasSignalPort
     """
-    eName, eID, ePort, fName, fID, fPort,N=load_matrix(matrix)
+    eDomain, eName, eID, ePort, fDomain, fName, fID, fPort,N=load_matrix_domain(matrix)
     if direction=='f2e':
         N=-N
     cName=eName+fName # component name, should be unique for the graph
     cPort=ePort+fPort # port name, unique for each component
     cID=eID+fID # can be used to specify the component type, such as resistor, capacitor, etc. '1' and '0' are used for the junctions
+    cDom=eDomain+fDomain # domain of the component, such as electrical, mechanical, etc.
     for i in range(len(cName)):
         if cName[i] not in G.nodes:
             if cID[i]=='1': # BondGraph Junction
@@ -38,20 +40,22 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
             elif cID[i]=='0': # BondGraph Junction
                 G.add_node(cName[i], a='JunctionStructure', subClass='ZeroJunctionStructure')
             elif cID[i]=='TF': # BondGraph Transformer
-                G.add_node(cName[i], a='JunctionStructure', subClass='TF', modelParameter={'n':{'units':'dimensionless',
+                G.add_node(cName[i], a='JunctionStructure', subClass='TF', domain=cDom[i], modelParameter={'n':{'units':'dimensionless',
                                     'propertyName':cName[i]}
                                     },)
             elif cID[i]=='zF': # BondGraph Transformer
-                G.add_node(cName[i], a='JunctionStructure', subClass='TF', modelParameter={'z':{'units':'dimensionless',
-                                    'propertyName':cName[i]},"F": {"description": "Faraday's constant", "units": "C_per_mol", "symbol": "F",'propertyName':"F"}},)
+                G.add_node(cName[i], a='JunctionStructure', subClass='TF', domain=cDom[i], modelParameter={'z':{'units':'dimensionless',
+                                    'propertyName':f'z_{cName[i]}',"value": 1},"F": {"description": "Faraday's constant","value": 96485, "units": "C_per_mol", "symbol": "F",'propertyName':"F"}},)
             elif cID[i]=='GY': # BondGraph Gyrator
-                G.add_node(cName[i], a='JunctionStructure', subClass='GY')
+                G.add_node(cName[i], a='JunctionStructure', subClass='GY', domain=cDom[i], modelParameter={'n':{'units':'dimensionless',
+                                    'propertyName':cName[i]}
+                                    },)
             elif cID[i]=='MTF': # BondGraph modulated Transformer
-                G.add_node(cName[i], a='JunctionStructure', subClass='MTF')
+                G.add_node(cName[i], a='JunctionStructure', subClass='MTF', domain=cDom[i])
             elif cID[i]=='MGY': # BondGraph modulated Gyrator
-                G.add_node(cName[i], a='JunctionStructure', subClass='MGY')
+                G.add_node(cName[i], a='JunctionStructure', subClass='MGY', domain=cDom[i])
             else: # BondGraph Element
-                G.add_node(cName[i], a='BondElement',subClass=cID[i]) # R, G (1/R), C, E (1/C), I, MR, MG, MC, ME, MI, MIC, MIE, Se, Sf, MSe, MSf, RS, MRS
+                G.add_node(cName[i], a='BondElement',subClass=cID[i], domain=cDom[i]) # R, G (1/R), C, E (1/C), I, MR, MG, MC, ME, MI, MIC, MIE, Se, Sf, MSe, MSf, RS, MRS
         iport=f'{cName[i]}_{cPort[i]}'
         if connection=='PowerBond':
             if i<len(eName):
@@ -149,7 +153,7 @@ def nxBG_addJunction_multi(G):
         source=edge[0]
         target=edge[1]
         TFName='TF_'+source+'_'+target
-        G.add_node(TFName, a='JunctionStructure', subClass='TF', 
+        G.add_node(TFName, a='JunctionStructure', subClass='TF', domain='e', 
                    modelParameter={'n':
                                     {'value':G.edges[edge]['multiplier'], 'units':'dimensionless',
                                     'propertyName':TFName}
@@ -393,10 +397,10 @@ def viaTransformer(G,TF):
     -------
     None
 
-    side effects
-    ------------
-    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if the energy is propagated through the Transformer
+    side effects the energy is propagated through the Transformer
     
+    ------------
+    The expression of the effort and flow of the PowerPorts and the PowerBond are updated if
     """
 
     ports=getPowerPorts(G,TF)
@@ -408,8 +412,8 @@ def viaTransformer(G,TF):
     causality_1=G.nodes[port_1]['causality']
     param_value=1
     for param in G.nodes[TF]['modelParameter']:
-        if 'value' in G.nodes[TF]['modelParameter'][param]:
-            param_value=param_value*float(G.nodes[TF]['modelParameter'][param]['value'])
+        if 'value' in G.nodes[TF]['modelParameter'][param] and len(G.nodes[TF]['modelParameter'])==1:
+            param_value=param_value*float(G.nodes[TF]['modelParameter'][param]['value'])   
         elif 'propertyName' in G.nodes[TF]['modelParameter'][param]:
             param_value=param_value*symbols(G.nodes[TF]['modelParameter'][param]['propertyName'])
         else:
@@ -582,8 +586,8 @@ if __name__ == "__main__":
     import os
     G=nx.DiGraph()
     path_='./data/'
-    fmatrix='./data/SLC5_f.csv'
-    rmatrix='./data/SLC5_r.csv'
+    fmatrix='./data/SLC5_f_domain.csv'
+    rmatrix='./data/SLC5_r_domain.csv'
     nxBG(G, fmatrix, direction='e2f', connection='PowerBond')
     nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
     
@@ -591,6 +595,8 @@ if __name__ == "__main__":
     save_nxBG_html(G, path_+'nx_BG_0.html')
     
     nxBG_addJunctions(G)
+
+    save_nxBG_json(G, path_+'nx_BG.json')
 
     nxBG_initEnergy(G)
 
