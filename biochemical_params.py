@@ -1,4 +1,3 @@
-from hmac import new
 from math import exp
 from sympy import nsimplify,Matrix
 import numpy as np

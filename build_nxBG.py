@@ -1,4 +1,3 @@
-from matplotlib.pylab import f
 import networkx as nx
 from utilities import  load_matrix_domain, save_nxBG_json, save_nxBG_html, load_nxBG_json
 from sympy import *
@@ -581,22 +580,39 @@ def nxBG_Energy(G):
                 raise ValueError(f'The flow of {node} is None')
     return     
 
-if __name__ == "__main__": 
-    
-    import os
+def build_nxBG_csv(fmatrix, rmatrix, nxBGJson):
+    """
+    Build the bond graph using networkx based on the csv files
+
+    Parameters
+    ----------
+    fmatrix : str
+        The path of the forward matrix file
+    rmatrix : str
+        The path of the reverse matrix file
+    nxBGJson : str
+        The full path to save the bond graph as json file
+
+    Returns
+    -------
+    None
+
+    """
     G=nx.DiGraph()
-    path_='./data/'
-    fmatrix='./data/SLC5_f_domain.csv'
-    rmatrix='./data/SLC5_r_domain.csv'
     nxBG(G, fmatrix, direction='e2f', connection='PowerBond')
     nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
     
-    save_nxBG_json(G, path_+'nx_BG_0.json')
-    save_nxBG_html(G, path_+'nx_BG_0.html')
-    
-    nxBG_addJunctions(G)
+    save_nxBG_json(G, nxBGJson)
+    save_nxBG_html(G, nxBGJson.replace('.json','.html'))
 
-    save_nxBG_json(G, path_+'nx_BG.json')
+if __name__ == "__main__": 
+    
+    path_='./data/'
+    fmatrix='./data/SLC5_f_domain.csv'
+    rmatrix='./data/SLC5_r_domain.csv'
+    nxBGJson=path_+'nx_BG.json'
+    build_nxBG_csv(fmatrix, rmatrix, nxBGJson)
+    G=load_nxBG_json(nxBGJson)
 
     nxBG_initEnergy(G)
 

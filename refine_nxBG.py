@@ -1,7 +1,8 @@
-from build_nxBG import getPowerPorts, getSignalPorts,load_nxBG_json,save_nxBG_json, nxBG_Energy
+from build_nxBG import getPowerPorts,load_nxBG_json,save_nxBG_json, nxBG_Energy
 from sympy import *
 import copy
 import json
+import pandas as pd
 """
 This module is used to refine the bond graph model in the networkx format
 The BondElement are refined based on the templates in the JSON file (./components/BG_components.json)
@@ -306,26 +307,146 @@ def nxBG_refine_constitutive_relations(G):
                                 if LHS_name not in G.nodes[node]['constitutive_eqs'].keys():
                                     G.nodes[node]['constitutive_eqs'][LHS_name]=(ccode(solved_expr), '')
 
+def nxBG_getParameters(G):
+    """
+    Get the parameters from the bond graph
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+
+    Returns
+    -------
+    parameters : dict
+        The parameters in the bond graph
+
+    """
+    parameters={}
+    for node in G.nodes:
+        if 'modelParameter' in G.nodes[node].keys():
+            for param in G.nodes[node]['modelParameter']:
+                if 'value' in G.nodes[node]['modelParameter'][param].keys():
+                    parameters[G.nodes[node]['modelParameter'][param]['propertyName']]=G.nodes[node]['modelParameter'][param]['value']
+                else:
+                    parameters[G.nodes[node]['modelParameter'][param]['propertyName']]=1.0 # default value
+        if 'modelState' in G.nodes[node].keys():
+            for param in G.nodes[node]['modelState']:
+                if 'value' in G.nodes[node]['modelState'][param].keys():
+                    parameters[G.nodes[node]['modelState'][param]['propertyName']]=G.nodes[node]['modelState'][param]['value']
+                else:
+                    parameters[G.nodes[node]['modelState'][param]['propertyName']]=1.0 # default value
+    return parameters
+
+def nxBG_refine_parameters(G,parameters):
+    """
+    Refine the parameters in the bond graph
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+    parameters : dict
+        The parameters in the bond graph
+
+    Returns
+    -------
+    none
+
+    side effects
+    ------------
+    The parameters in the bond graph are updated with the values from the dictionary
+
+    """
+    
+    for node in G.nodes:
+        if 'modelParameter' in G.nodes[node].keys():
+            for param in G.nodes[node]['modelParameter']:
+                if G.nodes[node]['modelParameter'][param]['propertyName'] in parameters.keys():
+                    G.nodes[node]['modelParameter'][param]['value']=parameters[G.nodes[node]['modelParameter'][param]['propertyName']]
+        if 'modelState' in G.nodes[node].keys():
+            for param in G.nodes[node]['modelState']:
+                if G.nodes[node]['modelState'][param]['propertyName'] in parameters.keys():
+                    G.nodes[node]['modelState'][param]['value']=parameters[G.nodes[node]['modelState'][param]['propertyName']]
+
+def nxBG_refine_paramCsv(G,bg_params_csv):
+    """
+    Refine the parameters in the bond graph
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+    bg_params_csv : str
+        The path of the csv file containing the parameters
+
+    Returns
+    -------
+    none
+
+    side effects
+    ------------
+    The parameters in the bond graph are updated with the values from the csv file
+
+    """
+    
+    parameters=pd.read_csv(bg_params_csv, header=None).set_index(0).T.to_dict('records')[0]
+    nxBG_refine_parameters(G,parameters)
+
+def nxBG_getParameters_csv(G,bg_params_csv):
+    """
+    Get the parameters from the bond graph and write them to a csv file
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The bond graph built using networkx
+    bg_params_csv : str
+        The path of the csv file to save the parameters
+
+    Returns
+    -------
+    none
+
+    side effects
+    ------------
+    The parameters in the bond graph are written to the csv file
+
+    """
+    
+    parameters=nxBG_getParameters(G)
+    pd.DataFrame.from_dict(parameters, orient='index').to_csv(bg_params_csv, header=False)
+
+def nxBG_refine(nxBGJson,bgComponentsJson,BG_domainJson,nxBGRefinedJson=None,bg_params_csv=None):
+    """
+    Refine the bond graph model in the networkx format
+    The BondElement are refined based on the templates in the JSON file (./components/BG_components.json)
+
+    """
+    
+    G = load_nxBG_json(nxBGJson)
+    bgComponents = json.load(open(bgComponentsJson))
+    BG_domain = json.load(open(BG_domainJson))
+    
+    nxBG_refine_domain(G,BG_domain)    
+    nxBG_refine_components(G,bgComponents)
+    nxBG_Energy(G)
+    nxBG_refine_constitutive_relations(G)
+    if bg_params_csv:
+        nxBG_refine_paramCsv(G,bg_params_csv)
+    if nxBGRefinedJson:
+        save_nxBG_json(G, nxBGRefinedJson)
+    else:
+        nx_BG_refined_file = nxBGJson.split('.json')[0]+'_refined.json'
+        save_nxBG_json(G, nx_BG_refined_file)
+
 if __name__ == "__main__": 
     
-    json_file = './components/BG_components.json'
-    bgComponents = json.load(open(json_file))
+    bgComponents = './components/BG_components.json'
     BG_domain_file = './components/BG_domain.json'
-    BG_domain = json.load(open(BG_domain_file))
     nx_BG_file = './data/nx_BG.json'
-    G = load_nxBG_json(nx_BG_file)
-    nxBG_refine_domain(G,BG_domain)
     
-    nx_BG_file = './data/nx_BG_domain.json'
-    save_nxBG_json(G, nx_BG_file)
-    
-    G = load_nxBG_json(nx_BG_file)
-    nxBG_refine_components(G,bgComponents)
-    nx_BG_file = './data/nx_BG_refine.json'
-    save_nxBG_json(G, nx_BG_file)
-    nxBG_Energy(G)
-    nx_BG_file = './data/nx_BG_energy.json'
-    save_nxBG_json(G, nx_BG_file)
-    nxBG_refine_constitutive_relations(G)   
-    nx_BG_file = './data/nx_BG_constitutive_energy.json'
-    save_nxBG_json(G, nx_BG_file)
+    nxBG_refine(nx_BG_file,bgComponents,BG_domain_file,bg_params_csv='./data/bg_params.csv')
+
+
+
