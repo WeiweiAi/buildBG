@@ -1,3 +1,4 @@
+from hmac import new
 from math import exp
 from sympy import nsimplify,Matrix
 import numpy as np
@@ -125,17 +126,17 @@ def BGparams2kinetic(N_f,N_r,kappa,K,Ws):
         The forward stoichiometry matrix
     N_r : 2d numpy.ndarray
         The reverse stoichiometry matrix
-    kappa : 1d numpy.ndarray
+    kappa : 1d list
         The reaction rate constants
-    K : 1d numpy.ndarray
+    K : 1d list
         The thermodynamic constants
     Ws : 1d list, the size is the number of species
            
     Returns
     -------
-    kf : 1d list
+    kf : 1d numpy.ndarray
         The forward rate constants, the same order as the reactions in N_f  
-    kr : 1d list
+    kr : 1d numpy.ndarray
         The reverse rate constants, the same order as the reactions in N_r
     
     """
@@ -161,6 +162,124 @@ def BGparams2kinetic(N_f,N_r,kappa,K,Ws):
     k_r = k[num_cols:]
     return k_f[:,0],k_r[:,0]
 
+def kinetic2BGparams_csvs(Kc,Nc,Ws,fmatrix,rmatrix,kinetic_params_csv='kinetic_params.csv',bg_params_csv='bg_params.csv'):
+    """
+    Convert the BG parameters to the kinetic parameters
+
+    Parameters
+    ----------
+    Kc : 1d list, the constraints, can be empty
+        The constraints, can be empty
+    Nc : 2d list, can be empty, 
+        the length of the Nc is the number of Kc,
+        the length of the Nc[0] is the number of the species
+    Ws : 1d list, the size is the number of species
+    fmatrix : str
+        The file path of the forward stoichiometry matrix csv file
+    rmatrix : str
+        The file path of the reverse stoichiometry matrix csv file
+    kinetic_params_csv : str, optional
+        The file path of the kinetic parameters csv file
+        The default is 'kinetic_params.csv'.
+    bg_params_csv : str, optional
+        The file path of the bg parameters csv file
+        The default is 'bg_params.csv'.
+
+    returns
+    -------
+    None
+
+    side effect
+    ------------
+    Save the bg parameters to a csv file
+    Save the estimated kinetic parameters to a new csv file            
+    """
+    
+    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
+    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
+    # check if the number of species is the same as the number of rows in the forward stoichiometry matrix
+    if len(Ws)!=N_f.shape[0]:
+        raise ValueError('The number of species in the volume csv file is not the same as the number of rows in the forward stoichiometry matrix')
+    pdf_k= pd.read_csv(kinetic_params_csv,index_col=0)
+    k_f=pdf_k['k_f'].to_numpy().flatten()
+    k_r=pdf_k['k_r'].to_numpy().flatten()
+    # the number of reactions is the same as the number of columns in the forward stoichiometry matrix
+    if len(k_f)!=N_f.shape[1]:
+        raise ValueError('The number of reactions in the kinetic parameters csv file is not the same as the number of columns in the forward stoichiometry matrix')
+    if len(k_r)!=N_r.shape[1]:
+        raise ValueError('The number of reactions in the kinetic parameters csv file is not the same as the number of columns in the reverse stoichiometry matrix')
+    kappa, K, K_eq, diff_, zero_est,k_est= kinetic2BGparams(N_f,N_r,k_f,k_r,Kc,Nc,Ws)
+    print('zero_est:',zero_est)
+    print('diff:',diff_)
+    bg_dict = {}
+    # create a dictionary for the bg parameters
+    for i in range(len(kappa)):
+        key=f'kappa_{fName[i]}'
+        bg_dict[key] = kappa[i]
+    for i in range(len(K)):
+        key=f'K_{eName[i]}'
+        bg_dict[key] = K[i]
+    # save the dictionary to a csv file
+    pd.DataFrame.from_dict(bg_dict, orient='index').to_csv(bg_params_csv, header=False)
+    # save the recalculated k_est parameters to a csv file
+    k_est=k_est.flatten()
+    num_k=len(k_est)-len(Kc)
+    k_dict_new={'k_f':k_est[:int(num_k/2)],'k_r':k_est[int(num_k/2):num_k]}
+    k_df_new=pd.DataFrame(data=k_dict_new)
+    # index starts from 1
+    k_df_new.index = [i+1 for i in range(len(k_f))]
+    new_csv_file = kinetic_params_csv.split('.csv')[0] + '_new.csv'
+    k_df_new.to_csv(new_csv_file, index_label='Reaction')
+     
+def BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv='bg_params.csv',kinetic_params_csv='kinetic_params.csv'):
+    """
+    Convert the BG parameters to the kinetic parameters
+
+    Parameters
+    ----------
+    fmatrix : str
+        The file path of the forward stoichiometry matrix csv file
+    rmatrix : str
+        The file path of the reverse stoichiometry matrix csv file
+    bg_params_csv : str, optional
+        The file path of the bg parameters csv file
+        The default is 'bg_params.csv'.
+    kinetic_params_csv : str, optional
+        The file path of the kinetic parameters csv file
+        The default is 'kinetic_params.csv'.
+
+    Returns
+    -------
+    None
+
+    side effect
+    ------------
+    Save the kinetic parameters to a csv file
+
+    """
+    
+    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
+    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
+    # check if the number of species is the same as the number of rows in the forward stoichiometry matrix
+    if len(Ws)!=N_f.shape[0]:
+        raise ValueError('The number of species in the volume csv file is not the same as the number of rows in the forward stoichiometry matrix')
+    bg_dict = pd.read_csv(bg_params_csv, header=None).set_index(0).T.to_dict('records')[0]
+    # get K and kappa from the bg_dict
+    kappa = [bg_dict[f'kappa_{f}'] for f in fName]
+    K = [bg_dict[f'K_{e}'] for e in eName]
+    # check if the number of reactions is the same as the number of columns in the forward stoichiometry matrix
+    if len(kappa)!=N_f.shape[1]:
+        raise ValueError('The number of reactions in the bg parameters csv file is not the same as the number of columns in the forward stoichiometry matrix')
+    if len(K)!=N_r.shape[0]:
+        raise ValueError('The number of reactions in the bg parameters csv file is not the same as the number of rows in the reverse stoichiometry matrix')
+    # convert the bg parameters to the kinetic parameters
+    k_f,k_r=BGparams2kinetic(N_f,N_r,kappa,K,Ws)
+    # save the kinetic parameters to a csv file
+    k_dict={'k_f':k_f,'k_r':k_r}
+    k_df=pd.DataFrame(data=k_dict)
+    # index starts from 1
+    k_df.index = [i+1 for i in range(len(k_f))]
+    k_df.to_csv(kinetic_params_csv, index_label='Reaction')    
 
 def write_params_csv( param_name,param_val, param_units, csv_file='params_BG.csv'):
     """
@@ -200,80 +319,7 @@ if __name__ == "__main__":
     file_path=os.path.join(current_dir, './data/')
     fmatrix=file_path+'NKE15state_f_chem.csv'
     rmatrix=file_path+'NKE15state_r_chem.csv'
-    # update the BG parameters for the biochemical reactions
-    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
-    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
-    """
-    var{environment.K_1} K_1: per_fmol {init: 101619537.2009};
-    var{environment.K_10} K_10: per_fmol {init: 20459.5509};
-    var{environment.K_11} K_11: per_fmol {init: 121.4456};
-    var{environment.K_12} K_12: per_fmol {init: 3.1436};
-    var{environment.K_13} K_13: per_fmol {init: 0.32549};
-    var{environment.K_14} K_14: per_fmol {init: 156.3283};
-    var{environment.K_15} K_15: per_fmol {init: 1977546.8577};
-    var{environment.K_2} K_2: per_fmol {init: 63209.8623};
-    var{environment.K_3} K_3: per_fmol {init: 157.2724};
-    var{environment.K_4} K_4: per_fmol {init: 14.0748};
-    var{environment.K_5} K_5: per_fmol {init: 5.0384};
-    var{environment.K_6} K_6: per_fmol {init: 92.6964};
-    var{environment.K_7} K_7: per_fmol {init: 4854.5924};
-    var{environment.K_8} K_8: per_fmol {init: 15260.9786};
-    var{environment.K_9} K_9: per_fmol {init: 13787022.8009};
-    var{environment.K_H} K_H: per_fmol {init: 0.04565};
-    var{environment.K_Ke} K_Ke: per_fmol {init: 0.009236};
-    var{environment.K_Ki} K_Ki: per_fmol {init: 0.0012595};
-    var{environment.K_MgADP} K_MgADP: per_fmol {init: 7.976e-05};
-    var{environment.K_MgATP} K_MgATP: per_fmol {init: 2.3715};
-    var{environment.K_Nae} K_Nae: per_fmol {init: 0.0061242};
-    var{environment.K_Nai} K_Nai: per_fmol {init: 0.00083514};
-    var{environment.K_P} K_P: per_fmol {init: 0.04565};
-    var{environment.kappa_1} kappa_1: fmol_per_sec {init: 330.5462};
-    var{environment.kappa_10} kappa_10: fmol_per_sec {init: 259461.6507};
-    var{environment.kappa_11} kappa_11: fmol_per_sec {init: 172042.3334};
-    var{environment.kappa_12} kappa_12: fmol_per_sec {init: 6646440.3909};
-    var{environment.kappa_13} kappa_13: fmol_per_sec {init: 597.4136};
-    var{environment.kappa_14} kappa_14: fmol_per_sec {init: 70.9823};
-    var{environment.kappa_15} kappa_15: fmol_per_sec {init: 0.015489};
-    var{environment.kappa_2} kappa_2: fmol_per_sec {init: 132850.9145};
-    var{environment.kappa_3} kappa_3: fmol_per_sec {init: 200356.0223};
-    var{environment.kappa_4} kappa_4: fmol_per_sec {init: 2238785.3951};
-    var{environment.kappa_5} kappa_5: fmol_per_sec {init: 10787.9052};
-    var{environment.kappa_6} kappa_6: fmol_per_sec {init: 15.3533};
-    var{environment.kappa_7} kappa_7: fmol_per_sec {init: 2.3822};
-    var{environment.kappa_8} kappa_8: fmol_per_sec {init: 2.2855};
-    var{environment.kappa_9} kappa_9: fmol_per_sec {init: 1540.1349};
-    """
-    kappa_1= 330.5462
-    kappa_2= 132850.9145
-    kappa_3= 200356.0223
-    kappa_4= 2238785.3951
-    kappa_5= 10787.9052
-    kappa_6= 15.3533
-    kappa_7= 2.3822
-    kappa_8= 2.2855
-    kappa_9= 1540.1349
-    kappa_10= 259461.6507
-    kappa_11= 172042.3334
-    kappa_12= 6646440.3909
-    kappa_13= 597.4136
-    kappa_14= 70.9823
-    kappa_15= 0.015489
-    kappa=[kappa_1,kappa_2,kappa_3,kappa_4,kappa_5,kappa_6,kappa_7,kappa_8,kappa_9,kappa_10,kappa_11,kappa_12,kappa_13,kappa_14,kappa_15]
-    K_1= 101619537.2009
-    K_2= 63209.8623
-    K_3= 157.2724
-    K_4= 14.0748
-    K_5= 5.0384
-    K_6= 92.6964
-    K_7= 4854.5924
-    K_8= 15260.9786
-    K_9= 13787022.8009
-    K_10= 20459.5509
-    K_11= 121.4456
-    K_12= 3.1436
-    K_13= 0.32549
-    K_14= 156.3283
-    K_15= 1977546.8577
+    
     K_Ki=0.0012595
     K_Ke=0.009236
     K_Nai=0.00083514
@@ -282,51 +328,14 @@ if __name__ == "__main__":
     K_MgADP=7.976e-05
     K_P=0.04565
     K_H=0.04565
-    K=[K_1,K_2,K_3,K_4,K_5,K_6,K_7,K_8,K_9,K_10,K_11,K_12,K_13,K_14,K_15,K_Ki,K_Ke,K_Nai,K_Nae,K_MgATP,K_MgADP,K_P,K_H]
     W_i=38
     W_e=5.182
-    Ws=[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,W_i,W_e,W_i,W_e,W_i, W_i, W_i, W_i]
-    k_f,k_r=BGparams2kinetic(N_f,N_r,kappa,K,Ws)
-    a=K_MgATP/(K_MgADP*K_H*K_P)
-    print('a:',a)
-    k_dict={'k_f':k_f,'k_r':k_r}
-    k_df=pd.DataFrame(data=k_dict)
-    k_df.to_csv(file_path+'kinetic_params.csv', )
-    
-    k_f_name=['k_f_'+str(i+1) for i in range(len(k_f))]
-    k_r_name=['k_r_'+str(i+1) for i in range(len(k_r))]
-    # Plot the k_f and k_r values in a bar chart to see the normalized values; no seaborn, only matplotlib
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bar_width = 0.35
-    index = np.arange(len(k_f))  # Create tick locations for the reactions
-
-    # Plot the bars for k_f and k_r
-    ax.bar(index, k_f, bar_width, label='k_f', color='b')
-    ax.bar(index + bar_width, k_r, bar_width, label='k_r', color='r')
-
-    # Set the x-axis labels
-    ax.set_xlabel('Reaction rate constants')
-    ax.set_ylabel('Values')
-    ax.set_title('Kinetic Parameters')
-
-    # Set the tick locations and labels
-    tick_locations = np.concatenate([index, index + bar_width])  # Combine tick locations for k_f and k_r
-    tick_labels = k_f_name + k_r_name  # Combine labels for k_f and k_r
-    ax.set_xticks(index + bar_width / 2)  # Center the ticks between the bars
-    ax.set_xticklabels(k_f_name, rotation=45)  # Use only `k_f_name` for the x-axis labels
-
-    # Add a legend and save the plot
-    ax.legend()
-    plt.tight_layout()
-    plt.savefig(file_path + 'kinetic_params.png')
-    
+    Ws=[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,W_i,W_e,W_i,W_e,W_i, W_i, W_i, W_i]   
     # convert the kinetic parameters to BG parameters
     deltaG_ATP=11.9e3 #J/mol
     R=8.314 #J/(K*mol)
     T=310 #K
-    K_c=[exp(-deltaG_ATP/(R*T))*10**6, 1,1,K_Ki*W_i,K_MgATP*W_i,K_MgADP*W_i,K_P*W_i,K_H*W_i] # the equilibrium constant for ATP hydrolysis
+    K_c=[exp(-deltaG_ATP/(R*T))*10**6, 1,1,K_Ki*W_i,K_MgATP*W_i,K_MgADP*W_i,K_P*W_i,K_H*W_i] 
     N_c=[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,-1,-1],
          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,0,0,0,0,0,0],
          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,0,0,0,0],
@@ -335,20 +344,10 @@ if __name__ == "__main__":
          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],
          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]]
-    kappa_new, K_new, K_eq, diff_,  zero_est,k_est= kinetic2BGparams(N_f,N_r,k_f,k_r,K_c,N_c,Ws)
-    print('zero_est:',zero_est)
-    print('diff:',diff_)
-    k_est=k_est.flatten()
-    num_k=len(k_est)-len(K_c)
-    print('num_k:',num_k)
-    k_dict_new={'k_f':k_est[:int(num_k/2)],'k_r':k_est[int(num_k/2):30]}
-    k_df_new=pd.DataFrame(data=k_dict_new)
-    k_df_new.to_csv(file_path+'kinetic_params_new.csv', )
-    param_val=np.concatenate((kappa_new,K_new))
-    param_name=fName+eName
-    param_units=['$fmol/s$']*len(fName)+['$fmol^{-1}$']*len(eName)
-    write_params_csv(param_name,param_val,param_units,csv_file=file_path+'params_BG.csv')
-    
+
+    kinetic2BGparams_csvs(K_c,N_c,Ws,fmatrix,rmatrix,kinetic_params_csv=file_path+'kinetic_params.csv',bg_params_csv=file_path+'bg_params.csv')
+    # convert the BG parameters to the kinetic parameters
+    BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv=file_path+'bg_params.csv',kinetic_params_csv=file_path+'kinetic_params_est.csv')
 
     
         
