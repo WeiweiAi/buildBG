@@ -600,7 +600,8 @@ def build_nxBG_csv(fmatrix, rmatrix, nxBGJson):
     """
     G=nx.DiGraph()
     nxBG(G, fmatrix, direction='e2f', connection='PowerBond')
-    nxBG(G, rmatrix, direction='f2e', connection='PowerBond')    
+    nxBG(G, rmatrix, direction='f2e', connection='PowerBond')
+    nxBG_addJunctions(G)    
     
     save_nxBG_json(G, nxBGJson)
     save_nxBG_html(G, nxBGJson.replace('.json','.html'))
@@ -615,7 +616,6 @@ if __name__ == "__main__":
     G=load_nxBG_json(nxBGJson)
 
     nxBG_initEnergy(G)
-
     nxBG_Energy(G)
 
     save_nxBG_json(G, path_+'nx_BG_Energy.json')

@@ -1,8 +1,11 @@
+from webbrowser import get
 from build_nxBG import getPowerPorts, load_nxBG_json
 import xml.etree.ElementTree as ET
 from utilities import infix_to_mathml
 import copy
 from xml.dom import minidom
+from pathlib import Path
+import libcellml
 
 
 CellMLV1_namespaces = {
@@ -289,10 +292,10 @@ def map_components(model, component1, component2):
                 else:
                     print('The public_interface of {} is not defined'.format(variable_2.attrib['name']))
 
-def nxBG2CellMLV1_ET(G, implementation_dict):
+def nxBG2CellMLV1(G, implementation_dict):
 
     """
-    implemention_dict={'language':'CellML','version':1.1,
+    implemention_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
                     'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
                     'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
                     'model_name':'SLC5_BG_run','model_file':'SLC5_BG_run.cellml',
@@ -306,6 +309,7 @@ def nxBG2CellMLV1_ET(G, implementation_dict):
     module_file=implementation_dict['module_file']
     params_file=implementation_dict['params_file']
     main_file=implementation_dict['model_file']
+    filepath=implementation_dict['filepath']
     observed_vars=implementation_dict['observed_vars']
     module_ET=create_cellmlV1_rootET(module_name,cellml_prefix=False)
     params_ET=create_cellmlV1_rootET(params_name) 
@@ -477,25 +481,94 @@ def nxBG2CellMLV1_ET(G, implementation_dict):
     map_components(model_ET, param_element, model_component)
     # map the variables in the module and parameters
     map_components(model_ET, module_element, param_element)
+    
+    # write to the CellML files
+    module_filepath=Path(filepath).joinpath(module_file)
+    params_filepath=Path(filepath).joinpath(params_file)
+    model_filepath=Path(filepath).joinpath(main_file)
+    write_cellmlV1(module_ET, module_filepath.resolve())
+    write_cellmlV1(params_ET, params_filepath.resolve())
+    write_cellmlV1(model_ET, model_filepath.resolve())
 
     return model_ET, module_ET, params_ET
 
+def getRdfFile(filename):
+
+  
+    # Parse the XML
+    tree = ET.parse(filename)
+    root = tree.getroot()
+
+    # Extract and print all namespaces (optional, for inspection)
+    namespaces = dict([
+        node for _, node in ET.iterparse(filename, events=['start-ns'])
+    ])
+    print("Detected namespaces:", namespaces)
+
+    # register the namespaces
+    for prefix, uri in namespaces.items():
+        ET.register_namespace(prefix, uri)
+
+    # Find <rdf:RDF> element(s)
+    rdf_elements = root.findall(".//rdf:RDF", namespaces)
+    output_filename = filename.replace('.cellml', '_rdf.xml')
+    # Write to file
+    with open(output_filename, 'w', encoding='utf-8') as out_file:
+        out_file.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+        for rdf in rdf_elements:
+            out_file.write(ET.tostring(rdf, encoding='unicode'))
+
+    print(f"RDF extracted and saved to {output_filename}")
+
+def getAnother(causality):
+    if causality=='effort':
+        return 'flow'
+    elif causality=='flow':
+        return 'effort'
+    else:
+        raise ('causality is wrong')
+
+def nxBG_CellML_elements(nxBGJson,full=False):
+    CellML_elements={}
+    CellML_elements['conservation_laws']=[]
+    if not full:
+        G = load_nxBG_json(nxBGJson)
+        for node in G.nodes:
+            if G.nodes[node]['a']=='BondElement':
+                node_ID=node
+                CellML_elements[node_ID]={}
+                if G.nodes[node]['subClass']=='Se':
+                    if 'modelParameter' in G.nodes[node]:
+                        for param in G.nodes[node]['modelParameter'].keys():
+                            if 'quantity' in G.nodes[node]['modelParameter'][param]['description']:
+                                CellML_elements[node_ID]['quantity']=G.nodes[node]['modelParameter'][param]['propertyName']
+                if 'modelState' in G.nodes[node]:
+                    for state in G.nodes[node]['modelState']:
+                        CellML_elements[node_ID]['quantity']=G.nodes[node]['modelState'][state]['propertyName']
+                powerPorts=getPowerPorts(G,node)
+                for powerPort in powerPorts:
+                    CellML_elements[node_ID][powerPort]={}
+                    causality=G.nodes[powerPort]['causality']
+                    CellML_elements[node_ID][powerPort][causality]=G.nodes[powerPort][causality]['propertyName']
+                    if 'expression' in G.nodes[powerPort][getAnother(causality)]:
+                        eq={}
+                        eq['yvar']=G.nodes[powerPort][getAnother(causality)]['propertyName']
+                        eq['infix']=G.nodes[powerPort][getAnother(causality)]['expression']
+                        CellML_elements['conservation_laws'].append(eq)
+    return CellML_elements                       
+
 if __name__ == "__main__": 
     
-    nx_BG_file = './data/nx_BG_constitutive_energy.json'
+    nx_BG_file = './data/nx_BG_refined.json'
     G = load_nxBG_json(nx_BG_file)
-    implementation_dict={'language':'CellML','version':1.1,
+    implementation_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
                     'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
                     'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
                     'model_name':'SLC5_BG_run','model_file':'SLC5_BG_run.cellml',
                     'units_file':'SLC5_BG_units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
                     'observed_vars': {'v_r1','T'}}
     
-    model_ET, module_ET, params_ET=nxBG2CellMLV1_ET(G, implementation_dict)
-    # Write the models to CellML files
-    filepath='./data/'
-    write_cellmlV1(module_ET, filepath+implementation_dict['module_file'])
-    write_cellmlV1(params_ET, filepath+implementation_dict['params_file'])
-    write_cellmlV1(model_ET, filepath+implementation_dict['model_file'])
+    #model_ET, module_ET, params_ET=nxBG2CellMLV1(G, implementation_dict)
 
    
+    getRdfFile('MacKenzie_1996.cellml')

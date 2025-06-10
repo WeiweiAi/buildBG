@@ -1,4 +1,4 @@
-from build_nxBG import getPowerPorts,load_nxBG_json,save_nxBG_json, nxBG_Energy
+from build_nxBG import getPowerPorts,load_nxBG_json,save_nxBG_json, nxBG_Energy,save_nxBG_html
 from sympy import *
 import copy
 import json
@@ -37,9 +37,9 @@ def _checkPortDirection(G,port):
 
     """
     if any(data.get('relationship') == 'hasPowerPort' for u, v, data in G.out_edges(port,data=True)):
-        direction='out'
-    elif any(data.get('relationship') == 'hasPowerPort' for u, v, data in G.in_edges(port,data=True)):
         direction='in'
+    elif any(data.get('relationship') == 'hasPowerPort' for u, v, data in G.in_edges(port,data=True)):
+        direction='out'
     else:
         raise ValueError('The direction is not correct')
     return direction
@@ -146,13 +146,13 @@ def nxBG_refine_component(G,bondElement,bgComponents):
             if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
                 pass
             elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
-                for u, v, data in G.out_edges(bondElement,data=True):
-                    G.remove_edge(u, v)
-                    G.add_edge(v,u,**data)
+                data=G.get_edge_data(bondElement,powerPort)
+                G.remove_edge(bondElement,powerPort)
+                G.add_edge(powerPort,bondElement,**data)
             elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
-                for u, v, data in G.in_edges(bondElement,data=True):
-                    G.remove_edge(u, v)
-                    G.add_edge(v,u,**data) 
+                data=G.get_edge_data(powerPort,bondElement)
+                G.remove_edge(powerPort,bondElement)
+                G.add_edge(bondElement,powerPort,**data)
             else:
                  raise ValueError('The orientation does not match.')    
 
@@ -214,13 +214,13 @@ def nxBG_refine_multiJunc(G,multiJunc,bgComponents):
             if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
                 pass
             elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
-                for u, v, data in G.out_edges(multiJunc,data=True):
-                    G.remove_edge(u, v)
-                    G.add_edge(v,u,**data)
+                data=G.get_edge_data(multiJunc,powerPort)
+                G.remove_edge(multiJunc,powerPort)
+                G.add_edge(powerPort,multiJunc,**data)
             elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
-                for u, v, data in G.in_edges(multiJunc,data=True):
-                    G.remove_edge(u, v)
-                    G.add_edge(v,u,**data) 
+                data=G.get_edge_data(powerPort,multiJunc)
+                G.remove_edge(powerPort,multiJunc)
+                G.add_edge(multiJunc,powerPort,**data) 
             else:
                  raise ValueError('The orientation does not match.')   
             
@@ -436,9 +436,11 @@ def nxBG_refine(nxBGJson,bgComponentsJson,BG_domainJson,nxBGRefinedJson=None,bg_
         nxBG_refine_paramCsv(G,bg_params_csv)
     if nxBGRefinedJson:
         save_nxBG_json(G, nxBGRefinedJson)
+        save_nxBG_html(G, nxBGRefinedJson.split('.json')[0]+'.html')
     else:
         nx_BG_refined_file = nxBGJson.split('.json')[0]+'_refined.json'
         save_nxBG_json(G, nx_BG_refined_file)
+        save_nxBG_html(G, nx_BG_refined_file.split('.json')[0]+'.html')
 
 if __name__ == "__main__": 
     
@@ -447,6 +449,10 @@ if __name__ == "__main__":
     nx_BG_file = './data/nx_BG.json'
     
     nxBG_refine(nx_BG_file,bgComponents,BG_domain_file,bg_params_csv='./data/bg_params.csv')
+    nx_BG_file = nx_BG_file.split('.json')[0]+'_refined.json'
+    G=load_nxBG_json(nx_BG_file)
+    path_='./data/'
+    save_nxBG_html(G, path_+'nx_BG_refined.html')
 
 
 

@@ -1,6 +1,5 @@
 import copy
 import numpy as np
-import csv
 from pathlib import Path
 from utilities import *
 from sympy import *
@@ -11,69 +10,6 @@ defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","far
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
     "newton","ohm","pascal","radian","second","siemens","sievert","steradian","tesla","volt","watt","weber"]
 params_common=['R','T','F']
-
-def load_matrix(matrix):
-    """
-    Load stoichiometric matrix from a csv file
-    The components are defined in BG_components.
-    The ID of the components is the key of the dictionary BG_components.
-    The components in the row take the potential as the input and the flow as the output, and we call them F components.
-    The components in the column take the flow as the input and the potential as the output, and we call them E components.
-    The csv file should have the following format (* means blank):
-    *       *     *      fName fName
-    *       *     *       fID   fID
-    *       *     *      fPort fPort
-    eName  eID  ePort      0    1 
-    eName  eID  ePort      1    0
-    
-    Parameters
-    ----------
-    matrix : str
-        The file path of the stoichiometric matrix
-    
-    Returns
-    -------
-    eName : list
-        A list of E component (e_out, f_in) names
-    eID : list
-        A list of E component (e_out, f_in) IDs
-    ePort : list
-        A list of E component (e_out, f_in) port number
-    fName : list
-        A list of F component (e_in, f_out) names
-    fID : list
-        A list of F component (e_in, f_out) IDs
-    fPort : list
-        A list of F component (e_in, f_out) port number
-    N : numpy.ndarray
-        The stoichiometric matrix
-    """
-    startC=3
-    N = []
-    eName=[]
-    eID=[]
-    ePort=[]
-    with open(matrix,'r') as f:
-        reader = csv.reader(f,delimiter=',')
-        line_count = 0
-        for row in reader:
-            if line_count ==0:
-                fName=row[startC:]
-                line_count += 1
-            elif line_count ==1:
-                fID=row[startC:]
-                line_count += 1
-            elif line_count == 2:
-                fPort=row[startC:]
-                line_count += 1
-            else:
-                N.append(row[startC:])
-                eName.append(row[0])
-                eID.append(row[1])
-                ePort.append(row[2])
-        f.close()
-    
-    return eName, eID, ePort, fName, fID, fPort, np.array(N).astype(int)
 
 def add_BG_components(bg_dict,bg_components_json, matrix, suffix=True):
     """
@@ -378,115 +314,6 @@ def update_BG_eqn(bg_dict,voi):
                                 solved_expr=solved_expr.subs(symbols(ikey),symbols(var_dict_[ikey]['symbol']))
                         comp['constitutive_eqs']+= [[comp['vars']['s_'+port]['symbol'], ccode(solved_expr), '']]                                  
 
-def kinetic2BGparams(N_f,N_r,kf,kr,Kc,Nc,Ws):
-    """
-    Convert kinetic parameters to BG parameters for biochemical reactions
-    The method is based on the thesis:
-    Pan, Michael. A bond graph approach to integrative biophysical modelling.
-    Diss. University of Melbourne, Parkville, Victoria, Australia, 2019.
-
-    Parameters
-    ----------
-    N_f : numpy.ndarray
-        The forward stoichiometry matrix
-    N_r : numpy.ndarray
-        The reverse stoichiometry matrix
-    kf : 1d list
-        The forward rate constants, the same order as the reactions in N_f  
-    kr : 1d list
-        The reverse rate constants, the same order as the reactions in N_r
-    Kc : 1d list, the constraints, can be empty
-    Nc : 2d list, can be empty, 
-        the length of the Nc is the number of Kc,
-        the length of the Nc[0] is the number of the species
-    Ws : 1d list, the size is the number of species
-           
-    Returns
-    -------
-    kappa : 1d numpy.ndarray
-        The reaction rate constants
-    K : 1d numpy.ndarray
-        The thermodynamic constants
-    K_eq : numpy.ndarray
-        The equilibrium constants
-    diff_ : float
-        The difference between the estimated and the input kinetic parameters
-    zero_est : numpy.ndarray
-        The estimated zero values of the detailed balance constraints
-
-    """ 
-    k_f=np.array([kf]).transpose()
-    k_r=np.array([kr]).transpose()
-    K_c=np.array([Kc]).transpose()
-    N_c=np.array(Nc).transpose()
-    W_s=np.array([Ws]).transpose()
-    
-    N_fT=np.transpose(N_f)
-    N_rT=np.transpose(N_r)
-    N = N_r - N_f
-    num_cols = N_f.shape[1] # number of reactions, the same as the number of columns in N_f
-    num_rows = N_f.shape[0] # number of species, the same as the number of rows in N_f
-    I=np.identity(num_cols)
-    N_cT=np.transpose(N_c)
-    num_contraints = K_c.shape[0]
-    zerofill=np.zeros((num_contraints,num_cols))
-    K_eq = np.divide(k_f,k_r)
-    if len(K_c)!=0:
-        M=np.block([
-            [I, N_fT],
-            [I, N_rT],
-            [zerofill, N_cT]
-        ])
-        k= np.block([
-            [k_f],
-            [k_r],
-            [K_c]
-        ]) 
-        N_b =np.hstack([-N, N_c])
-        K_contraints = np.block([
-            [K_eq],
-            [K_c]
-        ])
-    else:
-        M=np.block([
-            [I, N_fT],
-            [I, N_rT]
-        ])
-        k= np.block([
-            [k_f],
-            [k_r]
-        ])
-        N_b = -N
-        K_contraints = K_eq
-    # construct W matrix 
-    # the first nr elements are 1 for reactions, the last ns elements are the volume of species
-    W=np.vstack([np.ones((num_cols,1)),W_s]) 
-
-    # convert kinetic parameters to BG parameters
-    lambdaW= np.exp(np.matmul(np.linalg.pinv(M),np.log(k)))
-    lambda_ = np.divide(lambdaW,W)
-    kappa=lambda_[:num_cols]
-    K = lambda_[num_cols:]
-    
-    # check if the solution is valid
-    N_rref, _ = Matrix(N).rref()
-    zero_est = None
-    R_mat = np.array(nsimplify(Matrix(-N), rational=True).nullspace())
-    if R_mat.size>0:
-        R_mat = np.transpose(np.array(R_mat).astype(np.float64))[0]
-        zero_est = np.matmul(R_mat.T,K_eq)
-    # Check that there is a detailed balance constraint
-    if N_c.size>0:
-        Z = np.array(nsimplify(Matrix(N_c), rational=True).nullspace()) #rational_nullspace(M, 2)
-        if Z.size>0:
-            Z = np.transpose(np.array(Z).astype(np.float64))[0]
-            zero_est = np.matmul(Z.T,np.log(K_c))
-
-    k_est = np.exp(np.matmul(M,np.log(lambdaW)))
-    diff_ = np.sum(np.abs(np.divide(k_est - k,k)))
-
-    return kappa[:,0], K[:,0], K_eq[:,0], diff_, zero_est,k_est
-
 def update_BioBG_params(bg_dict, kappa, fName, K, eName):
     """
     Update the BG parameters of biochemitry components in the bg_dict
@@ -573,38 +400,7 @@ def update_BG_params(bg_dict, params):
             if 'params' in bg_dict[comp_name].keys():
                 bg_dict[comp_name]['params'][param_name]['value']=param_val
 
-def write_params_csv( param_name,param_val, param_units, csv_file='params_BG.csv'):
-    """
-    Update the BG parameters in the bg_dict with the parameters
 
-    Parameters
-    ----------
-    param_val : 1d numpy.ndarray
-        The parameter value
-    param_name : str array
-        The parameter name
-    param_units : str array
-        The parameter units
-    csv : str, optional
-        The file path of the csv file to save the parameters
-        The default is 'params_BG.csv'.
-
-    Returns
-    -------
-    None
-
-    side effect
-    ------------
-    Save the parameters to a csv file
-
-    """
-    
-    with open(csv_file, mode='w') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Parameter', 'Value', 'Units'])
-        for i in range(len(param_val)):
-            writer.writerow([param_name[i], param_val[i], param_units[i]])
-        file.close()
 
 def build_AdjacencyMatrix_(bg_dict):
     """
