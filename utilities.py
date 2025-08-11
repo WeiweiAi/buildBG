@@ -1,9 +1,5 @@
 import json
-from sympy import *
-import pandas as pd
-from scipy import integrate
 import numpy as np
-from pathlib import Path
 import csv
 import libsbml
 from networkx.readwrite import json_graph
@@ -419,89 +415,6 @@ def save_nxBG_html(G, filename='nx_BG.html'):
     _nxBG_pyvis_net(pyvis_net, filename)
     browser = webbrowser.get()
     browser.open(os.path.abspath(filename))
-
-def symExp_to_funcEval(symExp, df):
-    """
-    Evaluate the SymPy expression with the values in the dataframe
-
-    Parameters
-    ----------
-    symExp : str
-        The SymPy expression
-    df : pandas.DataFrame
-        The dataframe that contains the value of the SymPy expression.
-        The column name of the dataframe should be the variable name in the SymPy expression.
-        The column name of the dataframe should be 't' for the time variable.
-
-    Returns
-    -------
-    func_eval : numpy.ndarray
-        The numerical value of the SymPy expression
-    func_eval_integrate : float
-        The numerical value of the integral of the SymPy expression
-    func_eval_integrate_abs : float
-        The numerical value of the integral of the absolute value of the SymPy expression
-    func_eval_integrate_cumulative : numpy.ndarray
-        The numerical value of the cumulative integral of the SymPy expression
-    """
-    list_vars=list(symExp.free_symbols)
-    list_vars_str=[str(var) for var in list_vars]
-    func=lambdify(list_vars,symExp,'numpy')
-    func_eval=func(*[df[var] for var in list_vars_str])
-    func_eval_integrate=np.trapz(func_eval,df['t'])
-    func_eval_integrate_abs=np.trapz(np.abs(func_eval),df['t'])
-    func_eval_integrate_cumulative=integrate.cumulative_trapezoid(func_eval,x=df['t'],initial=0)
-
-    return func_eval,func_eval_integrate,func_eval_integrate_abs,func_eval_integrate_cumulative
-
-def calc_energy(P_comp_expr_dict,result_csv):
-    """
-    Calculate the energy and activity of the bond graph model
-
-    Parameters
-    ----------
-    P_comp_expr_dict : str
-        The dictionary of the expressions of the power of the components in the bond graph model
-        The key of the dictionary is the component name
-    result_csv : str
-        The file path of the csv file to save the result
-
-    Returns
-    -------
-    None
-
-    side effect
-    ------------
-    Save the energy and activity of the bond graph model to a csv file
-
-    """
-    df_result_csv=pd.read_csv(result_csv)
-    # get the path of the csv file
-    csv_path=Path(result_csv).parent
-    csv_file_name=Path(result_csv).stem
-    csv_file_power_comp=csv_path/(csv_file_name+'_comp_power.csv')
-    csv_file_activity_comp=csv_path/(csv_file_name+'_comp_activity.csv')
-    E_comp_val=np.zeros(len(P_comp_expr_dict))
-    A_comp_val=np.zeros(len(P_comp_expr_dict))
-    AI_comp_val=np.zeros(len(P_comp_expr_dict))
-    df_power_comp=pd.DataFrame(columns=P_comp_expr_dict.keys())
-    df_activity_comp=pd.DataFrame(columns=P_comp_expr_dict.keys())
-    df_power_comp['t']=df_result_csv['t']
-    df_activity_comp['t']=df_result_csv['t']
-    i=0
-    A_total=0
-    for comp in P_comp_expr_dict:
-        P_comp_expr=P_comp_expr_dict[comp]
-        df_power_comp[comp],E_comp_val[i],A_comp_val[i],df_activity_comp[comp]=symExp_to_funcEval(P_comp_expr,df_result_csv)
-        A_total+=A_comp_val[i]
-        i=i+1
-        
-    AI_comp_val=A_comp_val/A_total*100
-    df_power_comp.to_csv(csv_file_power_comp,index=False)
-    df_activity_comp.to_csv(csv_file_activity_comp,index=False)
-    dict_activity={'Componentl list':list(P_comp_expr_dict.keys()),'Energy': E_comp_val.tolist(), 'Activity': A_comp_val.tolist(), 'Activity Index': AI_comp_val.tolist(),
-                   }
-    save_json(dict_activity,csv_path/(csv_file_name+'_activity.json'))
 
 
 
