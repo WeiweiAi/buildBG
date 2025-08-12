@@ -1,3 +1,4 @@
+from webbrowser import get
 from build_nxBG import getPowerPorts, load_nxBG_json
 import xml.etree.ElementTree as ET
 from utilities import infix_to_mathml
@@ -206,7 +207,9 @@ def import_comp(model_ET, comp_name_new, comp_name, model_file, imported_model):
 
     Returns
     -------
-    None
+    xml.etree.ElementTree or xml.etree.Element 
+        The component element from the imported model
+    or None if the component is not found in the imported model
 
     Side effects
     ------------
@@ -296,58 +299,84 @@ def nxBG2CellMLV1(G, implementation_dict):
     implemention_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
                     'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
                     'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
-                    'model_name':'SLC5_BG_run','model_file':'SLC5_BG_run.cellml',
-                    'units_file':'SLC5_BG_units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
-                    'observed_vars': {var_name_1, var_name_2, ...}}
+                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml',
+                    'units_file':'units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
+                    'observed_vars': {var_name_1, var_name_2, ...}, 'constants':{var_name_1, var_name_2, ...},
+                    'conservation':'Y'}
     """
     units_file=implementation_dict['units_file']
     module_name=implementation_dict['module_name']
     params_name=implementation_dict['params_name']
-    model_name=implementation_dict['model_name']
+    modelEnv_name=implementation_dict['modelEnv_name']
     module_file=implementation_dict['module_file']
     params_file=implementation_dict['params_file']
-    main_file=implementation_dict['model_file']
+    modelEnv_file=implementation_dict['modelEnv_file']
     filepath=implementation_dict['filepath']
     observed_vars=implementation_dict['observed_vars']
+    constants=set(implementation_dict['constants'])
+    conservation=implementation_dict['conservation']
     module_ET=create_cellmlV1_rootET(module_name,cellml_prefix=False)
     params_ET=create_cellmlV1_rootET(params_name) 
-    model_ET=create_cellmlV1_rootET(model_name)
+    modelEnv_ET=create_cellmlV1_rootET(modelEnv_name)
     # register the CellML namespace    
     ET.register_namespace('cellml', CellMLV1_namespaces['cellml'])
     # Create the MathML element with the correct namespace
     mathml_element = cellml_element('math', {'xmlns': CellMLV1_namespaces['math']})   
     module_component = cellml_subelement(module_ET, 'component', {'name': module_name})
-    model_component = cellml_subelement(model_ET, 'component', {'name': model_name})
+    modelEnv_component = cellml_subelement(modelEnv_ET, 'component', {'name': modelEnv_name})
     params_component = cellml_subelement(params_ET, 'component', {'name': params_name})
-
     params_set=set()
     param_units_set=set()
+    EnvParam_units_set=set()
+    EnvParams_set=set()
     var_units_set=set()
     var_set=set() 
     params = []
+    EnvParams=[]
     param_vars = []
     vars = []
     for node in G.nodes:
         if G.nodes[node]['a']=='BondElement':
-            if 'modelParameter' in G.nodes[node].keys():
-                for param in G.nodes[node]['modelParameter']:                    
-                    if G.nodes[node]['modelParameter'][param]['propertyName'] not in params_set: 
-                        var_name = G.nodes[node]['modelParameter'][param]['propertyName']
-                        var_units = G.nodes[node]['modelParameter'][param]['units']
-                        var_value = G.nodes[node]['modelParameter'][param]['value']
-                        # put the parameters in the params component
-                        param_units_set.add(var_units)
-                        params_set.add(var_name)
-                        cellml_var = CellMLVariable(var_name, var_units)
-                        cellml_var.set_initial_value(str(var_value)) 
-                        cellml_var.set_public_interface('out')                                        
-                        params.append(cellml_var.get_element())
-                        # put the parameters in the module component
-                        var_units_set.add(var_units)
-                        var_set.add(var_name)
-                        cellml_var = CellMLVariable(var_name, var_units)
-                        cellml_var.set_public_interface('in')
-                        param_vars.append(cellml_var.get_element())
+            if G.nodes[node]['subClass']!='Se' and G.nodes[node]['subClass']!='Sf':
+                if 'modelParameter' in G.nodes[node].keys():                
+                    for param in G.nodes[node]['modelParameter']:                    
+                        if G.nodes[node]['modelParameter'][param]['propertyName'] not in (params_set | constants): 
+                            var_name = G.nodes[node]['modelParameter'][param]['propertyName']
+                            var_units = G.nodes[node]['modelParameter'][param]['units']
+                            var_value = G.nodes[node]['modelParameter'][param]['value']
+                            # put the parameters in the params component
+                            param_units_set.add(var_units)
+                            params_set.add(var_name)
+                            cellml_var = CellMLVariable(var_name, var_units)
+                            cellml_var.set_initial_value(str(var_value)) 
+                            cellml_var.set_public_interface('out')                                        
+                            params.append(cellml_var.get_element())
+                            # put the parameters in the module component
+                            var_units_set.add(var_units)
+                            var_set.add(var_name)
+                            cellml_var = CellMLVariable(var_name, var_units)
+                            cellml_var.set_public_interface('in')
+                            param_vars.append(cellml_var.get_element())
+            else: # Se or Sf
+                if 'modelParameter' in G.nodes[node].keys():
+                    for param in G.nodes[node]['modelParameter']:                    
+                        if G.nodes[node]['modelParameter'][param]['propertyName'] not in EnvParams_set: 
+                            var_name = G.nodes[node]['modelParameter'][param]['propertyName']
+                            var_units = G.nodes[node]['modelParameter'][param]['units']
+                            var_value = G.nodes[node]['modelParameter'][param]['value']
+                            # put the parameters in the params component
+                            EnvParam_units_set.add(var_units)
+                            EnvParams_set.add(var_name)
+                            cellml_var = CellMLVariable(var_name, var_units)
+                            cellml_var.set_initial_value(str(var_value)) 
+                            cellml_var.set_public_interface('out')                                        
+                            EnvParams.append(cellml_var.get_element())
+                            # put the parameters in the module component 
+                            var_units_set.add(var_units)
+                            var_set.add(var_name)
+                            cellml_var = CellMLVariable(var_name, var_units)
+                            cellml_var.set_public_interface('in')
+                            param_vars.append(cellml_var.get_element())
             if 'modelState' in G.nodes[node].keys():
                 for state in G.nodes[node]['modelState']:
                     var_name = G.nodes[node]['modelState'][state]['propertyName']
@@ -362,11 +391,14 @@ def nxBG2CellMLV1(G, implementation_dict):
                         cellml_var.set_initial_value('1') # default value
                     cellml_var.set_public_interface('out')
                     params.append(cellml_var.get_element())
+                    # put the initial value as a variable in the module component
+                    cellml_var.set_public_interface('in') # set the public interface to 'in'
+                    cellml_var.set_initial_value(None)
+                    vars.append(cellml_var.get_element())
                     # put the state variable in the module component
                     var_units_set.add(var_units)
                     var_set.add(var_name)
                     cellml_var = CellMLVariable(var_name, var_units)
-                    cellml_var.set_public_interface('in')
                     cellml_var.set_initial_value(var_init_name)
                     vars.append(cellml_var.get_element())
             if 'constitutive_eqs' in G.nodes[node].keys():
@@ -389,11 +421,32 @@ def nxBG2CellMLV1(G, implementation_dict):
                 var_units_set.add(var_units)
                 if cellml_var.name not in var_set:
                     vars.append(cellml_var.get_element())
-                    var_set.add(var_name) 
+                    var_set.add(var_name)
+                if conservation=='Y':
+                    in_causality=getAnother(causality)
+                    var_name_in= G.nodes[powerPort][in_causality]['propertyName']
+                    var_units_in= G.nodes[powerPort][in_causality]['units']
+                    cellml_var_in = CellMLVariable(var_name_in, var_units_in)
+                    var_units_set.add(var_units_in)
+                    if cellml_var_in.name not in var_set:
+                        vars.append(cellml_var_in.get_element())
+                        var_set.add(var_name_in)
+                    if 'expression' in G.nodes[powerPort][in_causality].keys():
+                        LHS_name = G.nodes[powerPort][in_causality]['propertyName']
+                        mmathml_string = infix_to_mathml(LHS_name, G.nodes[powerPort][in_causality]['expression'], '')
+                        # Parse the MathML string
+                        try:
+                            # Convert the generated math string into an XML element
+                            math_content = ET.fromstring(mmathml_string)
+                            if len(math_content) > 0:
+                                mathml_element.append(math_content[0])  # Append the first child, which is the actual content
+                        except ET.ParseError as e:
+                            print(f"Error parsing MathML: {e}")
+
         if G.nodes[node]['a']=='JunctionStructure' and (G.nodes[node]['subClass']=='TF' or G.nodes[node]['subClass']=='GY'):
             if 'modelParameter' in G.nodes[node].keys() and len(G.nodes[node]['modelParameter'])>1:
                 for param in G.nodes[node]['modelParameter']:                    
-                    if G.nodes[node]['modelParameter'][param]['propertyName'] not in params_set: 
+                    if G.nodes[node]['modelParameter'][param]['propertyName'] not in (params_set): 
                         var_name = G.nodes[node]['modelParameter'][param]['propertyName']
                         var_units = G.nodes[node]['modelParameter'][param]['units']
                         var_value = G.nodes[node]['modelParameter'][param]['value']
@@ -410,7 +463,7 @@ def nxBG2CellMLV1(G, implementation_dict):
                         cellml_var = CellMLVariable(var_name, var_units)
                         cellml_var.set_public_interface('in')
                         param_vars.append(cellml_var.get_element())
-
+                        # Process the expression as needed
     if 'voi' in implementation_dict.keys():
         var_name = implementation_dict['voi']['propertyName']
         var_units = implementation_dict['voi']['units']
@@ -421,6 +474,10 @@ def nxBG2CellMLV1(G, implementation_dict):
     for param in params:
         params_component.append(param)
     units_import(params_ET, param_units_set,units_file)
+    # Add environmental parameters to the modelEnv component
+    for env_param in EnvParams:
+        modelEnv_component.append(env_param)
+    units_import(modelEnv_ET, EnvParam_units_set, units_file)
     # Add parameters to the module component
     for param_var in param_vars:
         module_component.append(param_var)
@@ -443,52 +500,22 @@ def nxBG2CellMLV1(G, implementation_dict):
         if variable_element is not None:
             variable_attributes = variable_element.attrib
             if 'public_interface' not in variable_attributes.keys():
-                variable_attributes['public_interface']='out'
-                copy_variable_attributes = copy.deepcopy(variable_attributes)
-                copy_variable_attributes['public_interface']='in'
-                ET.SubElement(model_component, 'variable', copy_variable_attributes)
-            elif variable_attributes['public_interface'] == 'out':
-                    copy_variable_attributes = copy.deepcopy(variable_attributes)
-                    copy_variable_attributes['public_interface'] = 'in'
-                    ET.SubElement(model_component, 'variable', copy_variable_attributes)
-            else: # find the variable in the params component
-                variable_attributes = {}
-                for variable in params_component.findall('variable'):
-                    if variable.attrib['name'] == observable:
-                        variable_element = variable
-                        break
-                if variable_element is not None:
-                    variable_attributes = variable_element.attrib                  
-                    if variable_attributes['public_interface'] == 'out':
-                        copy_variable_attributes = copy.deepcopy(variable_attributes)
-                        copy_variable_attributes['public_interface'] = 'in'
-                        # remove the initial value from the copy
-                        if 'initial_value' in copy_variable_attributes.keys():
-                            del copy_variable_attributes['initial_value']
-                        ET.SubElement(model_component, 'variable', copy_variable_attributes)
-                    else:
-                        raise ValueError(f"Observable variable '{observable}' has an invalid public interface.")
-                else:
-                    raise ValueError(f"Observable variable '{observable}' not found")          
+                variable_attributes['public_interface']='out'       
 
-    module_element = import_comp(model_ET, module_name, module_name , module_file,module_ET)
-    param_element= import_comp(model_ET, params_name, params_name , params_file,params_ET)    
-    # map the variables in the module and main model
-    map_components(model_ET, module_element, model_component)
-    # map the variables in the parameters and main model
-    map_components(model_ET, param_element, model_component)
-    # map the variables in the module and parameters
-    map_components(model_ET, module_element, param_element)
-    
+    param_element= import_comp(module_ET, params_name, params_name , params_file,params_ET)
+    modelEnv_element= import_comp(module_ET, modelEnv_name, modelEnv_name , modelEnv_file,modelEnv_ET)
+    map_components(module_ET, module_component, param_element)
+    map_components(module_ET, module_component, modelEnv_element)
+
     # write to the CellML files
     module_filepath=Path(filepath).joinpath(module_file)
     params_filepath=Path(filepath).joinpath(params_file)
-    model_filepath=Path(filepath).joinpath(main_file)
+    modelEnv_filepath=Path(filepath).joinpath(modelEnv_file)
     write_cellmlV1(module_ET, module_filepath.resolve())
     write_cellmlV1(params_ET, params_filepath.resolve())
-    write_cellmlV1(model_ET, model_filepath.resolve())
+    write_cellmlV1(modelEnv_ET, modelEnv_filepath.resolve())
 
-    return model_ET, module_ET, params_ET
+    return modelEnv_ET, module_ET, params_ET
 
 def getAnother(causality):
     if causality=='effort':
@@ -534,8 +561,8 @@ if __name__ == "__main__":
     implementation_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
                     'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
                     'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
-                    'model_name':'SLC5_BG_run','model_file':'SLC5_BG_run.cellml',
-                    'units_file':'SLC5_BG_units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
-                    'observed_vars': {'v_r1','T'}}
+                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml',
+                    'units_file':'units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
+                    'observed_vars': {'v_r1','T'},'constants': {'F','T', 'R'},'conservation':'Y'}
     
-    model_ET, module_ET, params_ET=nxBG2CellMLV1(G, implementation_dict)
+    modelEnv_ET, module_ET, params_ET=nxBG2CellMLV1(G, implementation_dict)
