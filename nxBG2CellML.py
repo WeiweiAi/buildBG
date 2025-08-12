@@ -1,4 +1,3 @@
-from webbrowser import get
 from build_nxBG import getPowerPorts, load_nxBG_json
 import xml.etree.ElementTree as ET
 from utilities import infix_to_mathml
