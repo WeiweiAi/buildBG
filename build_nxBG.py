@@ -81,8 +81,7 @@ def nxBG(G, matrix, direction='e2f', connection='PowerBond'):
 def nxBG_addJunction(G):
     """
     Add the 0 or 1 junction to the bond graph 
-    in case the PowerPort of the BondElement has more than 2 powerbond connections
-    
+        
     Parameters
     ----------
     G : nx.DiGraph
@@ -96,7 +95,7 @@ def nxBG_addJunction(G):
     """
     PowerPort_BondElement=[node for node in G.nodes if G.nodes[node]['a']=='PowerPort' and G.nodes[node]['isPortOf']=='BondElement']
     for node in PowerPort_BondElement:        
-        if G.degree(node)>2:
+        if G.degree(node)>1:
             jName='J_'+node
             G.add_node(jName, a='JunctionStructure')
             jPort=0

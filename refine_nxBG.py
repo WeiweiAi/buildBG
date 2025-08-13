@@ -44,6 +44,22 @@ def _checkPortDirection(G,port):
         raise ValueError('The direction is not correct')
     return direction
 
+def _flipEdge(G, port, direction):
+    """
+    Flip the direction of the edge connected to the port
+    """
+    if direction == 'in':  # from in to out
+        edges_to_flip = [(u, v, data) for u, v, data in G.in_edges(port, data=True) if data.get('a') == 'PowerBond']
+        for u, v, data in edges_to_flip:
+            G.add_edge(v, u, **data)
+            G.remove_edge(u, v)
+    elif direction == 'out':  # from out to in
+        edges_to_flip = [(u, v, data) for u, v, data in G.out_edges(port, data=True) if data.get('a') == 'PowerBond']
+        for u, v, data in edges_to_flip:
+            G.add_edge(v, u, **data)
+            G.remove_edge(u, v)
+
+
 def nxBG_refine_component(G,bondElement,bgComponents):
     """
     Refine the components in the bond graph
@@ -71,7 +87,7 @@ def nxBG_refine_component(G,bondElement,bgComponents):
     def check_sharedVar(G,bondElement,powerPorts, causality): 
         if len(powerPorts)==1:
             return True
-        elif len(powerPorts)>=2:       
+        elif len(powerPorts)>=2:    # e.g., f_0==f_1 in Re component
             output_var_0=f'{causality[0]}_{powerPorts[0].split("_")[-1]}'
             output_var_1=f'{causality[0]}_{powerPorts[1].split("_")[-1]}'
             for expr in G.nodes[bondElement]['hasConstitutiveRelation']:
@@ -142,17 +158,19 @@ def nxBG_refine_component(G,bondElement,bgComponents):
                 flow['propertyName']=flow['symbol']+'_'+bondElement
             else:
                 flow['propertyName']=flow['symbol']+'_'+powerPort
-            # check the orientation of the power port
-            if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
-                pass
-            elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
-                data=G.get_edge_data(bondElement,powerPort)
-                G.remove_edge(bondElement,powerPort)
-                G.add_edge(powerPort,bondElement,**data)
-            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
-                data=G.get_edge_data(powerPort,bondElement)
-                G.remove_edge(powerPort,bondElement)
-                G.add_edge(bondElement,powerPort,**data)
+            # check the orientation of the power port           
+            if bg_comp_dict["ports"][powerPortN]['orientation']=='in':
+                _flipEdge(G,powerPort,'out')# align the orientation of the bond and the power port
+                if _checkPortDirection(G,powerPort)=='out':
+                    data=G.get_edge_data(bondElement,powerPort)
+                    G.remove_edge(bondElement,powerPort)
+                    G.add_edge(powerPort,bondElement,**data)
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out':
+                _flipEdge(G,powerPort,'in')# align the orientation of the bond and the power port
+                if _checkPortDirection(G,powerPort)=='in':
+                    data=G.get_edge_data(powerPort,bondElement)
+                    G.remove_edge(powerPort,bondElement)
+                    G.add_edge(bondElement,powerPort,**data)
             else:
                  raise ValueError('The orientation does not match.')    
 
@@ -209,20 +227,21 @@ def nxBG_refine_multiJunc(G,multiJunc,bgComponents):
         raise ValueError('The number of ports does not match.') 
     else:
         for powerPort in powerPorts:
-            powerPortN=powerPort.split('_')[-1]
+            powerPortN=powerPort.split('_')[-1]          
              # check the orientation of the power port
-            if bg_comp_dict["ports"][powerPortN]['orientation']==_checkPortDirection(G,powerPort):
-                pass
-            elif bg_comp_dict["ports"][powerPortN]['orientation']=='in' and _checkPortDirection(G,powerPort)=='out':
-                data=G.get_edge_data(multiJunc,powerPort)
-                G.remove_edge(multiJunc,powerPort)
-                G.add_edge(powerPort,multiJunc,**data)
-            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out' and _checkPortDirection(G,powerPort)=='in':
-                data=G.get_edge_data(powerPort,multiJunc)
-                G.remove_edge(powerPort,multiJunc)
-                G.add_edge(multiJunc,powerPort,**data) 
+            if bg_comp_dict["ports"][powerPortN]['orientation']=='in':
+                if _checkPortDirection(G,powerPort)=='out':
+                    data=G.get_edge_data(multiJunc,powerPort)
+                    G.remove_edge(multiJunc,powerPort)
+                    G.add_edge(powerPort,multiJunc,**data)
+            elif bg_comp_dict["ports"][powerPortN]['orientation']=='out':
+                if _checkPortDirection(G,powerPort)=='in':
+                    data=G.get_edge_data(powerPort,multiJunc)
+                    G.remove_edge(powerPort,multiJunc)
+                    G.add_edge(multiJunc,powerPort,**data)
             else:
-                 raise ValueError('The orientation does not match.')   
+                 raise ValueError('The orientation does not match.')
+
             
 def nxBG_refine_components(G,bgComponents):
     
