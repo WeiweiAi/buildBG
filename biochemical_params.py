@@ -1,5 +1,7 @@
 from math import exp
-from sympy import nsimplify,Matrix
+from tkinter import W
+from networkx import volume
+from sympy import N, nsimplify,Matrix
 import numpy as np
 import csv
 import os
@@ -280,6 +282,44 @@ def BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv='bg_params.csv',kinet
     k_df.index = [i+1 for i in range(len(k_f))]
     k_df.to_csv(kinetic_params_csv, index_label='Reaction')    
 
+def matrix_constraints(species,volumes, constraints=None):
+    """
+    Create the constraints matrix and volume vector for the BG parameters
+
+    parameters
+    ----------
+    species : list
+        The list of species
+    volumes : dict
+        The dictionary of volumes and the keys are the species names
+    constraints : dict, optional
+        The dictionary of constraints,[{'num':[species],'denom':[species],'value':1}]
+    """
+    # default volumes
+    Ws = np.ones(len(species))
+    # update volumes
+    for i, s in enumerate(species):
+        if s in volumes.keys():
+            Ws[i] = volumes[s]
+    K_c = []
+    N_c = []
+    if constraints:
+        cols=len(constraints)
+        for i in range(cols):
+            num = [] if 'num' not in constraints[i].keys() else constraints[i]['num']
+            denom = [] if 'denom' not in constraints[i].keys() else constraints[i]['denom']
+            value = constraints[i]['value']
+            K_c.append(value)
+            nc=[0]*len(species)
+            # for the species in the numerator, get their indices and set the corresponding list element 1;
+            for s in num:
+                nc[species.index(s)] = 1
+            for s in denom:
+                nc[species.index(s)] = -1
+            N_c.append(nc)
+
+    return Ws,K_c, N_c
+
 def write_params_csv( param_name,param_val, param_units, csv_file='params_BG.csv'):
     """
     Update the BG parameters in the bg_dict with the parameters
@@ -329,20 +369,20 @@ if __name__ == "__main__":
     K_H=0.04565
     W_i=38
     W_e=5.182
-    Ws=[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,W_i,W_e,W_i,W_e,W_i, W_i, W_i, W_i]   
     # convert the kinetic parameters to BG parameters
     deltaG_ATP=11.9e3 #J/mol
     R=8.314 #J/(K*mol)
     T=310 #K
-    K_c=[exp(-deltaG_ATP/(R*T))*10**6, 1,1,K_Ki*W_i,K_MgATP*W_i,K_MgADP*W_i,K_P*W_i,K_H*W_i] 
-    N_c=[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,-1,-1],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,0,0,0,0,0,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,-1,0,0,0,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],
-         [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]]
+    species=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','Ki','Ke','Nai','Nae','MgATP','MgADP','P','H']
+    volumes={'Ki':W_i,'Ke':W_e,'Nai':W_i,'Nae':W_e,'MgATP':W_i,'MgADP':W_i,'P':W_i,'H':W_i}
+    constraints=[{'num':['MgATP'],'denom':['MgADP','P','H'],'value':exp(-deltaG_ATP/(R*T))*10**6},
+                 {'num':['Ki'],'value':K_Ki*W_i},
+                 {'num':['MgADP'],'value':K_MgADP*W_i},
+                 {'num':['P'],'value':K_P*W_i},
+                 {'num':['H'],'value':K_H*W_i},
+                 {'num':['MgATP'],'value':K_MgATP*W_i}]
+
+    Ws,K_c,N_c=matrix_constraints(species,volumes,constraints)
 
     kinetic2BGparams_csvs(K_c,N_c,Ws,fmatrix,rmatrix,kinetic_params_csv=file_path+'kinetic_params.csv',bg_params_csv=file_path+'bg_params.csv')
     # convert the BG parameters to the kinetic parameters
