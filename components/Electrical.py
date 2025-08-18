@@ -118,7 +118,7 @@ Se = {
         "metamodel": "Se",
          "ports": {
             "0": {
-                'orientation': 'out',
+                'orientation': 'in',
                 },
         },
         "params": {
