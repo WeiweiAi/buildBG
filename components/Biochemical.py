@@ -23,13 +23,13 @@ Ce = {
               "description": "universal gas constant",
               "units": "J_per_K_mol",
               "symbol": "R",
-              "value": 8.31
+              "value": 8.314
           },
           "T":{
                 "description": "temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 298.15,
             },
         
         },    
@@ -61,13 +61,13 @@ Re ={
               "description": "universal gas constant",
               "units": "J_per_K_mol",
               "symbol": "R",
-              "value": 8.31
+              "value": 8.314
           },
           "T":{
                 "description": "temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 298.15,
             },
         },
        
@@ -138,13 +138,13 @@ Re_GHK ={
               "description": "universal gas constant",
               "units": "J_per_K_mol",
               "symbol": "R",
-              "value": 8.31
+              "value": 8.314
           },
           "T":{
                 "description": "temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 298.15,
             },
         },
         "constitutive_relations":[
@@ -172,13 +172,13 @@ Se = {
               "description": "universal gas constant",
               "units": "J_per_K_mol",
               "symbol": "R",
-              "value": 8.31
+              "value": 8.314
           },
           "T":{
                 "description": "temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 298.15,
             },
             "q_0":{
                 "description":"molar quantity",
@@ -236,7 +236,7 @@ def BG_components():
                 "description":"universal gas constant",
                 "units": "J_per_K_mol",
                 "symbol": "R",
-                "value": 8.31,
+                "value": 8.314,
                 },
                 "F": {
                 "description": "Faraday's constant",
@@ -250,7 +250,7 @@ def BG_components():
                 "description": "temperature",
                 "units": "kelvin",
                 "symbol": "T",
-                "value": 293,
+                "value": 298.15,
                 },
             },
            "components": {

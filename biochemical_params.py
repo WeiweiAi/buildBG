@@ -1,4 +1,3 @@
-from math import e, exp
 from sympy import  nsimplify,Matrix
 import numpy as np
 import csv
@@ -374,7 +373,7 @@ if __name__ == "__main__":
     T=310 #K
     species=['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','Ki','Ke','Nai','Nae','MgATP','MgADP','P','H']
     volumes={'Ki':W_i,'Ke':W_e,'Nai':W_i,'Nae':W_e,'MgATP':W_i,'MgADP':W_i,'P':W_i,'H':W_i}
-    constraints=[{'num':['MgATP'],'denom':['MgADP','P','H'],'value':exp(-deltaG_ATP/(R*T))*10**6},
+    constraints=[{'num':['MgATP'],'denom':['MgADP','P','H'],'value':np.exp(-deltaG_ATP/(R*T))*10**6},
                  {'num':['Ki'],'value':K_Ki*W_i},
                  {'num':['MgADP'],'value':K_MgADP*W_i},
                  {'num':['P'],'value':K_P*W_i},

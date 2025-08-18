@@ -1,3 +1,4 @@
+from os import write
 from build_nxBG import getPowerPorts, load_nxBG_json
 import xml.etree.ElementTree as ET
 from utilities import infix_to_mathml
@@ -296,9 +297,9 @@ def nxBG2CellMLV1(G, implementation_dict):
 
     """
     implemention_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
-                    'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
-                    'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
-                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml',
+                    'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml','write_module_file':'Y',
+                    'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml','write_params_file':'Y',
+                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml','write_modelEnv_file':'Y',
                     'units_file':'units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
                     'observed_vars': {var_name_1, var_name_2, ...}, 'constants':{var_name_1, var_name_2, ...},
                     'conservation':'Y'}
@@ -314,6 +315,10 @@ def nxBG2CellMLV1(G, implementation_dict):
     observed_vars=implementation_dict['observed_vars']
     constants=set(implementation_dict['constants'])
     conservation=implementation_dict['conservation']
+    write_module_file=implementation_dict['write_module_file']
+    write_params_file=implementation_dict['write_params_file']
+    write_modelEnv_file=implementation_dict['write_modelEnv_file']
+
     module_ET=create_cellmlV1_rootET(module_name,cellml_prefix=False)
     params_ET=create_cellmlV1_rootET(params_name) 
     modelEnv_ET=create_cellmlV1_rootET(modelEnv_name)
@@ -510,9 +515,15 @@ def nxBG2CellMLV1(G, implementation_dict):
     module_filepath=Path(filepath).joinpath(module_file)
     params_filepath=Path(filepath).joinpath(params_file)
     modelEnv_filepath=Path(filepath).joinpath(modelEnv_file)
-    write_cellmlV1(module_ET, module_filepath.resolve())
-    write_cellmlV1(params_ET, params_filepath.resolve())
-    write_cellmlV1(modelEnv_ET, modelEnv_filepath.resolve())
+    if not module_filepath.parent.exists():
+        module_filepath.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        if write_module_file=='Y':
+            write_cellmlV1(module_ET, module_filepath.resolve())
+        if write_params_file=='Y':
+            write_cellmlV1(params_ET, params_filepath.resolve())
+        if write_modelEnv_file=='Y':
+            write_cellmlV1(modelEnv_ET, modelEnv_filepath.resolve())
 
     return modelEnv_ET, module_ET, params_ET
 
@@ -558,9 +569,9 @@ if __name__ == "__main__":
     nx_BG_file = './data/nx_BG_refined.json'
     G = load_nxBG_json(nx_BG_file)
     implementation_dict={'language':'CellML','version':1.1, 'filepath':'./data/',
-                    'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml',
-                    'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml',
-                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml',
+                    'module_name':'SLC5_BG','module_file':'SLC5_BG.cellml', 'write_module_file':'Y',
+                    'params_name':'SLC5_BG_param','params_file':'SLC5_BG_param.cellml','write_params_file':'Y',
+                    'modelEnv_name':'SLC5_BG_Env','modelEnv_file':'SLC5_BG_Env.cellml','write_modelEnv_file':'Y',
                     'units_file':'units.cellml', 'voi':{'propertyName': 't', 'units': 'second'},
                     'observed_vars': {'v_r1','T'},'constants': {'F','T', 'R'},'conservation':'Y'}
     
