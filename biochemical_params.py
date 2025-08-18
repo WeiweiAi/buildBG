@@ -1,11 +1,9 @@
-from math import exp
-from tkinter import W
-from networkx import volume
-from sympy import N, nsimplify,Matrix
+from math import e, exp
+from sympy import  nsimplify,Matrix
 import numpy as np
 import csv
 import os
-from utilities import load_matrix
+from utilities import load_matrix, load_matrix_domain
 import pandas as pd
 
 def kinetic2BGparams(N_f,N_r,kf,kr,Kc,Nc,Ws):
@@ -163,7 +161,7 @@ def BGparams2kinetic(N_f,N_r,kappa,K,Ws):
     k_r = k[num_cols:]
     return k_f[:,0],k_r[:,0]
 
-def kinetic2BGparams_csvs(Kc,Nc,Ws,fmatrix,rmatrix,kinetic_params_csv='kinetic_params.csv',bg_params_csv='bg_params.csv'):
+def kinetic2BGparams_csvs(Kc,Nc,Ws,eName, fName, N_f, N_r, kinetic_params_csv='kinetic_params.csv',bg_params_csv='bg_params.csv'):
     """
     Convert the BG parameters to the kinetic parameters
 
@@ -175,10 +173,12 @@ def kinetic2BGparams_csvs(Kc,Nc,Ws,fmatrix,rmatrix,kinetic_params_csv='kinetic_p
         the length of the Nc is the number of Kc,
         the length of the Nc[0] is the number of the species
     Ws : 1d list, the size is the number of species
-    fmatrix : str
-        The file path of the forward stoichiometry matrix csv file
-    rmatrix : str
-        The file path of the reverse stoichiometry matrix csv file
+    eName : 1d list, the size is the number of species
+    fName : 1d list, the size is the number of reactions
+    N_f: 2d numpy.ndarray
+        The forward stoichiometry matrix
+    N_r: 2d numpy.ndarray
+        The reverse stoichiometry matrix
     kinetic_params_csv : str, optional
         The file path of the kinetic parameters csv file
         The default is 'kinetic_params.csv'.
@@ -196,8 +196,6 @@ def kinetic2BGparams_csvs(Kc,Nc,Ws,fmatrix,rmatrix,kinetic_params_csv='kinetic_p
     Save the estimated kinetic parameters to a new csv file            
     """
     
-    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
-    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
     # check if the number of species is the same as the number of rows in the forward stoichiometry matrix
     if len(Ws)!=N_f.shape[0]:
         raise ValueError('The number of species in the volume csv file is not the same as the number of rows in the forward stoichiometry matrix')
@@ -232,16 +230,19 @@ def kinetic2BGparams_csvs(Kc,Nc,Ws,fmatrix,rmatrix,kinetic_params_csv='kinetic_p
     new_csv_file = kinetic_params_csv.split('.csv')[0] + '_new.csv'
     k_df_new.to_csv(new_csv_file, index_label='Reaction')
      
-def BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv='bg_params.csv',kinetic_params_csv='kinetic_params.csv'):
+def BGparams2kinetic_csvs(Ws,eName,fName, N_f, N_r,bg_params_csv='bg_params.csv',kinetic_params_csv='kinetic_params.csv'):
     """
     Convert the BG parameters to the kinetic parameters
 
     Parameters
     ----------
-    fmatrix : str
-        The file path of the forward stoichiometry matrix csv file
-    rmatrix : str
-        The file path of the reverse stoichiometry matrix csv file
+    Ws : 1d list, the size is the number of species
+    eName : 1d list, the size is the number of species
+    fName : 1d list, the size is the number of reactions
+    N_f : 2d numpy.ndarray
+        The forward stoichiometry matrix
+    N_r : 2d numpy.ndarray
+        The reverse stoichiometry matrix
     bg_params_csv : str, optional
         The file path of the bg parameters csv file
         The default is 'bg_params.csv'.
@@ -258,9 +259,6 @@ def BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv='bg_params.csv',kinet
     Save the kinetic parameters to a csv file
 
     """
-    
-    eName, eID, ePort, fName, fID, fPort,N_f=load_matrix(fmatrix)
-    eName, eID, ePort, fName, fID, fPort,N_r=load_matrix(rmatrix)
     # check if the number of species is the same as the number of rows in the forward stoichiometry matrix
     if len(Ws)!=N_f.shape[0]:
         raise ValueError('The number of species in the volume csv file is not the same as the number of rows in the forward stoichiometry matrix')
@@ -369,6 +367,7 @@ if __name__ == "__main__":
     K_H=0.04565
     W_i=38
     W_e=5.182
+    K_1=101619537.2009
     # convert the kinetic parameters to BG parameters
     deltaG_ATP=11.9e3 #J/mol
     R=8.314 #J/(K*mol)
@@ -380,13 +379,16 @@ if __name__ == "__main__":
                  {'num':['MgADP'],'value':K_MgADP*W_i},
                  {'num':['P'],'value':K_P*W_i},
                  {'num':['H'],'value':K_H*W_i},
-                 {'num':['MgATP'],'value':K_MgATP*W_i}]
+                 {'num':['MgATP'],'value':K_MgATP*W_i},
+                 {'num':['1'],'value':K_1}]
 
     Ws,K_c,N_c=matrix_constraints(species,volumes,constraints)
+    eDomain, eName, eID, ePort, fDomain, fName, fID, fPort, N_f = load_matrix_domain(fmatrix)
+    eDomain, eName, eID, ePort, fDomain, fName, fID, fPort, N_r = load_matrix_domain(rmatrix)
 
-    kinetic2BGparams_csvs(K_c,N_c,Ws,fmatrix,rmatrix,kinetic_params_csv=file_path+'kinetic_params.csv',bg_params_csv=file_path+'bg_params.csv')
+    kinetic2BGparams_csvs(K_c,N_c,Ws,eName, fName, N_f, N_r ,kinetic_params_csv=file_path+'kinetic_params.csv',bg_params_csv=file_path+'bg_params.csv')
     # convert the BG parameters to the kinetic parameters
-    BGparams2kinetic_csvs(Ws,fmatrix,rmatrix,bg_params_csv=file_path+'bg_params.csv',kinetic_params_csv=file_path+'kinetic_params_est.csv')
+    BGparams2kinetic_csvs(Ws,eName,fName, N_f, N_r ,bg_params_csv=file_path+'bg_params.csv',kinetic_params_csv=file_path+'kinetic_params_est.csv')
 
     
         
