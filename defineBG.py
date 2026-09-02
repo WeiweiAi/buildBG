@@ -1,6 +1,7 @@
 from __future__ import annotations
+import weakref
 from enum import Enum, auto
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field,InitVar
 from collections import deque
 from typing import  Any,Callable
 import warnings
@@ -10,6 +11,7 @@ import graphviz
 # Sequential Causality Assignment Procedure (SCAP)
 # Karnopp, Dean. "Alternative bond graph causal patterns and equation formulations for dynamic systems." (1983): 58-63.
 class ComponentType(Enum):
+    """Categorizes physical, junction, transducer, and control components."""
     # Borutzky, Wolfgang. Bond graph modelling of engineering systems. Vol. 103. New York: springer, 2011.
     C = auto()  # Capacitor / Spring, a storage node only contains C-type ports, the flow variable is integrated with respect to time
     I = auto()  # Inductor / Mass,  a storage node only contains I-type ports, the effort variable is integrated with respect to time
@@ -18,6 +20,8 @@ class ComponentType(Enum):
     MI = auto() # A modulated I-type storage
     MIC = auto() # A modulated storage node contains both C-type and I-type ports
     R = auto()  # Resistor / Damper,https://bg-rdf.org/ontologies/bondgraph-framework#Dissipator
+    Re= auto() # A biochemical reaction, https://bg-rdf.org/ontologies/bondgraph-framework#Reaction
+    Re_GHK= auto() # A voltage modulated biochemical reaction-Goldman-Hodgkin-Katz (GHK) ion channel
     MR = auto() # A modulated R-type dissipator
     # Sources
     SE = auto() # Effort Source, the dependent port variable is an effort
@@ -35,11 +39,12 @@ class ComponentType(Enum):
     GY = auto()   # Gyrator
     MTF = auto()  # Modulated Transformer
     MGY = auto()  # Modulated Gyrator
-    # User-defined / Custom
-    CUSTOM = auto() # User-defined component
+    # Mathematical Relations
     BLOCK = auto()  # All nodes that only have signal ports and represent mathematical relations between these signals.
-
+    # User-defined / Custom
+    CUSTOM = auto() # User-defined component   
 class PowerVariable(Enum):
+    """Identifies the effort, flow, state, and signal variables of a domain."""
     EFFORT = auto() # e.g., voltage, force, pressure
     FLOW = auto()   # e.g., current, velocity, volumetric flow rate
     QUANTITY = auto() # e.g., charge, displacement, volume
@@ -47,18 +52,19 @@ class PowerVariable(Enum):
     POWER = auto() # e.g., power, energy rate
     ENERGY = auto() # e.g., energy, work
     SIGNAL = auto() # A signal represents one arbitrary variable of time that may also be an effort or a flow, but not necessarily
-
 class ConnectionType(Enum):
+    """Distinguishes energy-carrying bonds from one-way signal bonds."""
     POWER_BOND = auto() # carries both effort and flow (bidirectional)
     SIGNAL_BOND = auto() # carries only signal (unidirectional)
-
 class PortType(Enum):
+    """Describes the physical role and causality behavior of a port."""
     POWER_PORT = auto() # Port for power exchange (effort and flow)
     SIGNAL_PORT = auto() # Port for signal interface (control signals)
-    C_TYPE_PORT = auto() # Port for C-type storage (integrates flow to quantity)
-    I_TYPE_PORT = auto() # Port for I-type storage (integrates effort to momentum)
+    C_TYPE_PORT = auto() # Port for C-type storage (integrates flow to quantity), is a power port
+    I_TYPE_PORT = auto() # Port for I-type storage (integrates effort to momentum), is a power port
 
 class Causality(Enum):
+    """Records which end of a bond receives effort."""
     EFFORT_AT_SOURCE = auto() # Causal stroke at the source port, 
                               # i.e., the source port receives the effort (input) from the bond and the target port provides the effort (output) to the bond.
                               # i.e., the source port provides the flow (output) to the bond and the target port receives the flow (input) from the bond.
@@ -66,8 +72,8 @@ class Causality(Enum):
                               # i.e., the target port receives the effort (input) from the bond and the source port provides the effort (output) to the bond.
                               # i.e., the target port provides the flow (output) to the bond and the source port receives the flow (input) from the bond.
     UNASSIGNED = auto()
-
 class ConstitutiveRelationship(Enum):
+    """Lists supported implicit constitutive-equation forms."""
     PHI_C=auto() # q - PHI_C(e) = 0
     PHI_I=auto() # p - PHI_I(f) = 0
     PHI_IC=auto() # q - PHI_IC(e) = 0, p - PHI_IC(f) = 0
@@ -85,8 +91,8 @@ class ConstitutiveRelationship(Enum):
     PHI_MSE=auto() # e - PHI_MSE(t) = 0
     PHI_MSF=auto() # f - PHI_MSF(t) = 0
     PHI_USER=auto() # User-defined constitutive relationship
-
 class Domain(Enum):
+    """Enumerates built-in physical domains and the abstract fallback domain."""
     ABSTRACT = auto()  # Default state: uses e, f, p, q
     ELECTRICAL = auto()
     MECHANICAL_TRANSLATIONAL = auto()
@@ -95,13 +101,12 @@ class Domain(Enum):
     CHEMICAL = auto()
     THERMAL = auto()
     CUSTOM = auto()
-
 class SystemType(Enum):
+    """Classifies a graph's resulting ordinary or differential-algebraic system."""
     ODE = auto()
     DAE_DERIVATIVE = auto()
     DAE_ALGEBRAIC = auto()
     DAE_MIXED = auto()
-
 @dataclass
 class PhysicalQuantity:
     """Metadata for a domain-specific power variable."""
@@ -109,43 +114,61 @@ class PhysicalQuantity:
     symbol: str
     units: str
 
-DOMAIN_VARIABLES: dict[Domain, dict[PowerVariable, PhysicalQuantity]] = {
-    Domain.ABSTRACT: {
-        PowerVariable.EFFORT: PhysicalQuantity("generalized effort", "e", "effort_units"),
-        PowerVariable.FLOW: PhysicalQuantity("generalized flow", "f", "flow_units"),
-        PowerVariable.QUANTITY: PhysicalQuantity("generalized extensive quantity", "q", "extensive_quantity_units"),
-        PowerVariable.MOMENTUM: PhysicalQuantity("generalized momentum", "p", "momentum_units"),
-    },
-    Domain.ELECTRICAL: {
-        PowerVariable.EFFORT: PhysicalQuantity("voltage", "u", "volt"),
-        PowerVariable.FLOW: PhysicalQuantity("current", "i", "fA"),
-        PowerVariable.QUANTITY: PhysicalQuantity("charge", "q", "fC"),
-        PowerVariable.MOMENTUM: PhysicalQuantity("magnetic flux linkage", "p", "volt_s"),
-    },
-    Domain.MECHANICAL_TRANSLATIONAL: {
-        PowerVariable.EFFORT: PhysicalQuantity("force", "F", "J_per_um"),
-        PowerVariable.FLOW: PhysicalQuantity("velocity", "v", "um_per_s"),
-        PowerVariable.QUANTITY: PhysicalQuantity("displacement", "x", "um"),
-        PowerVariable.MOMENTUM: PhysicalQuantity("momentum", "p", "J_s_per_um"),
-    },
-    Domain.MECHANICAL_ROTATIONAL: {
-        PowerVariable.EFFORT: PhysicalQuantity("torque", "T", "J_per_rad"),
-        PowerVariable.FLOW: PhysicalQuantity("angular velocity", "w", "rad_per_s"),
-        PowerVariable.QUANTITY: PhysicalQuantity("angular displacement", "theta", "rad"),
-        PowerVariable.MOMENTUM: PhysicalQuantity("angular momentum", "p", "J_s_per_rad"),
-    },
-    Domain.HYDRAULIC: {
-        PowerVariable.EFFORT: PhysicalQuantity("pressure", "P", "mmHg"),
-        PowerVariable.FLOW: PhysicalQuantity("volume flow", "Q", "mL_per_s"),
-        PowerVariable.QUANTITY: PhysicalQuantity("volume", "V", "mL"),
-        PowerVariable.MOMENTUM: PhysicalQuantity("momentum of a flow tube", "p", "mmHg_mL2_per_s3"),
-    },
-    Domain.CHEMICAL: {
-        PowerVariable.EFFORT: PhysicalQuantity("chemical potential", "mu", "J_per_mol"),
-        PowerVariable.FLOW: PhysicalQuantity("molar flow", "v", "fmol_per_s"),
-        PowerVariable.QUANTITY: PhysicalQuantity("molar amount", "q", "fmol")
-    },
-}
+class DomainRegistry:
+    """Central registry for domain-specific physical quantities."""
+
+    _registry: dict[Domain | str, dict[PowerVariable | str, PhysicalQuantity]] = {
+        Domain.ABSTRACT: {
+            PowerVariable.EFFORT: PhysicalQuantity("generalized effort", "e", "effort_units"),
+            PowerVariable.FLOW: PhysicalQuantity("generalized flow", "f", "flow_units"),
+            PowerVariable.QUANTITY: PhysicalQuantity("generalized extensive quantity", "q", "extensive_quantity_units"),
+            PowerVariable.MOMENTUM: PhysicalQuantity("generalized momentum", "p", "momentum_units"),
+        },
+        Domain.ELECTRICAL: {
+            PowerVariable.EFFORT: PhysicalQuantity("voltage", "u", "volt"),
+            PowerVariable.FLOW: PhysicalQuantity("current", "i", "fA"),
+            PowerVariable.QUANTITY: PhysicalQuantity("charge", "q", "fC"),
+            PowerVariable.MOMENTUM: PhysicalQuantity("magnetic flux linkage", "p", "volt_s"),
+        },
+        Domain.MECHANICAL_TRANSLATIONAL: {
+            PowerVariable.EFFORT: PhysicalQuantity("force", "F", "J_per_um"),
+            PowerVariable.FLOW: PhysicalQuantity("velocity", "v", "um_per_s"),
+            PowerVariable.QUANTITY: PhysicalQuantity("displacement", "x", "um"),
+            PowerVariable.MOMENTUM: PhysicalQuantity("momentum", "p", "J_s_per_um"),
+        },
+        Domain.MECHANICAL_ROTATIONAL: {
+            PowerVariable.EFFORT: PhysicalQuantity("torque", "T", "J_per_rad"),
+            PowerVariable.FLOW: PhysicalQuantity("angular velocity", "w", "rad_per_s"),
+            PowerVariable.QUANTITY: PhysicalQuantity("angular displacement", "theta", "rad"),
+            PowerVariable.MOMENTUM: PhysicalQuantity("angular momentum", "p", "J_s_per_rad"),
+        },
+        Domain.HYDRAULIC: {
+            PowerVariable.EFFORT: PhysicalQuantity("pressure", "P", "mmHg"),
+            PowerVariable.FLOW: PhysicalQuantity("volume flow", "Q", "mL_per_s"),
+            PowerVariable.QUANTITY: PhysicalQuantity("volume", "V", "mL"),
+            PowerVariable.MOMENTUM: PhysicalQuantity("momentum of a flow tube", "p", "mmHg_mL2_per_s3"),
+        },
+        Domain.CHEMICAL: {
+            PowerVariable.EFFORT: PhysicalQuantity("chemical potential", "mu", "J_per_mol"),
+            PowerVariable.FLOW: PhysicalQuantity("molar flow", "v", "fmol_per_s"),
+            PowerVariable.QUANTITY: PhysicalQuantity("molar amount", "q", "fmol")
+        }
+    }
+
+    @classmethod
+    def register(cls, domain: Domain | str, variables: dict[PowerVariable | str, PhysicalQuantity]) -> None:
+        """Registers a new domain or overwrites an existing one."""
+        # Ensure at least Effort and Flow are present, as they are mandatory for Bond Graph physics
+        if PowerVariable.EFFORT not in variables or PowerVariable.FLOW not in variables:
+            raise ValueError(f"Domain '{domain}' must define at least EFFORT and FLOW variables.")
+        
+        cls._registry[domain] = variables
+
+    @classmethod
+    def get_variables(cls, domain: 'Domain | str') -> dict[PowerVariable | str, PhysicalQuantity] | None:
+        """Returns registered variable metadata for a domain, if present."""
+        return cls._registry.get(domain)
+
 
 @dataclass
 class StateVariable:
@@ -155,13 +178,13 @@ class StateVariable:
 
     @property
     def symbol(self) -> str:
-        """Dynamically resolves the physical symbol based on the domain."""
-        domain_dict = DOMAIN_VARIABLES.get(self.component.domain)
+        """Returns the domain-specific state symbol qualified by component name."""
+        # Query the new registry
+        domain_dict = DomainRegistry.get_variables(self.component.domain)
         if domain_dict and self.variable_type in domain_dict:
             base_symbol = domain_dict[self.variable_type].symbol
             return f"{base_symbol}_{self.component.name}"
         
-        # Fallback if domain is missing
         fallback = "q" if self.variable_type == PowerVariable.QUANTITY else "p"
         return f"{fallback}_{self.component.name}"
     @property
@@ -175,64 +198,131 @@ class ConstitutiveEquation:
     expression: Any  # Could be a string for now, or a sympy.Expr in a real solver
     description: str = ""
 
-@dataclass
+@dataclass(eq=False)
 class Port:
-    label: str
-    component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
+    """Represents one typed connection point on a component."""
+    label: str # the ports of each component are uniquely labelled
+    component_ref: InitVar[Component] # Take the strong ref during init
+    # Store the weak reference object (requires repr=False)
+    _component_weak: weakref.ReferenceType[Component] = field(init=False, repr=False)
     port_type: PortType = PortType.POWER_PORT
-    fixed_causality: Causality | None = None # Either EFFORT_AT_SOURCE (output effort) or EFFORT_AT_TARGET (output flow) 
-    domain: Domain = Domain.ABSTRACT
-    bond: Bond | None = field(default=None, repr=False, init=False)
+    fixed_causality: Causality | None = None # If set, this port's causality will not be changed during causality assignment. 
+    domain: Domain | str = Domain.ABSTRACT
+    # Store the bond as a weak reference
+    _bond_weak: weakref.ReferenceType[Bond] | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self, component_ref: Component) -> None:
+        """Keeps a weak link to the owning component after initialization."""
+        # Use weakref.ref instead of weakref.proxy
+        self._component_weak = weakref.ref(component_ref)
 
     @property
-    def effective_domain(self) -> Domain:
+    def bond(self) -> 'Bond | None':
+        """Returns the connected bond, or `None` when the port is free."""
+        if self._bond_weak is None:
+            return None
+        return self._bond_weak() # Resolves the weak reference to the actual Bond object
+    
+    def _attach_bond(self, bond: Bond) -> None:
+        """Associates this free port with a newly created bond."""
+        if self.bond is not None:
+            raise ValueError(f"Port {self.name} is already connected.")
+        self._bond_weak = weakref.ref(bond)
+
+    def _detach_bond(self) -> None:
+        """Clears the bond association when the bond is removed."""
+        self._bond_weak = None
+
+    @property
+    def component(self) -> Component:
+        """Returns the live component that owns this port."""
+        # Calling the weakref object '()' returns the original, strongly-referenced Component.
+        # This original Component is perfectly hashable and safe for your sets.
+        comp = self._component_weak()
+        if comp is None:
+            raise RuntimeError(f"The parent component of port '{self.label}' has been destroyed.")
+        return comp
+    
+    @property
+    def effective_domain(self) -> Domain | str:
+        """Returns the port override domain or its component's domain."""
         return self.domain if self.domain != Domain.ABSTRACT else self.component.domain
 
     @property
     def name(self) -> str:
+        """Returns the fully qualified `<component>.<port>` identifier."""
         return f"{self.component.name}.{self.label}"
     
     def _get_symbol(self, variable_type: PowerVariable, default_prefix: str) -> str:
-        domain_dict = DOMAIN_VARIABLES.get(self.effective_domain)
+        """Builds a qualified variable symbol using the effective domain registry."""
+        # Query the new registry
+        domain_dict = DomainRegistry.get_variables(self.effective_domain)
         if domain_dict and variable_type in domain_dict:
             return f"{domain_dict[variable_type].symbol}_{self.name}"
         return f"{default_prefix}_{self.name}"
 
     @property
     def effort(self) -> str:
+        """Returns this port's effort-variable symbol."""
         return self._get_symbol(PowerVariable.EFFORT, "e")
 
     @property
     def flow(self) -> str:
+        """Returns this port's flow-variable symbol."""
         return self._get_symbol(PowerVariable.FLOW, "f")
 
     @property
     def signal(self) -> str:
+        """Returns this port's signal-variable symbol."""
         return self._get_symbol(PowerVariable.SIGNAL, "s")
 
-@dataclass
+@dataclass(eq=False)
 class Bond:
+    """Connects two ports and owns their shared causality assignment."""
     source: Port
     target: Port
     connection_type: ConnectionType = ConnectionType.POWER_BOND
     causality: Causality = Causality.UNASSIGNED
 
     def __post_init__(self) -> None:
-        # 1. Enforce the "exactly one bond per port" rule
+        """Validates endpoints and atomically attaches the bond to both ports."""
+        # Enforce structural invariants
+        if self.source.component is self.target.component:
+            raise ValueError("Cannot create a bond between ports on the same component.")
+            
+        # Look-ahead check (prevents partial connections!)
         if self.source.bond is not None:
-            raise ValueError(f"Source port {self.source.name} is already connected to a bond.")
+            raise ValueError(f"Source port {self.source.name} is already connected.")
         if self.target.bond is not None:
-            raise ValueError(f"Target port {self.target.name} is already connected to a bond.")        
-        # 2. If the checks pass, establish the bidirectional link
-        self.source.bond = self
-        self.target.bond = self
+            raise ValueError(f"Target port {self.target.name} is already connected.")        
+
+        # Enforce domain compatibility (for power bonds)
+        # Note: Signal bonds are exempt from this check
+        if self.connection_type == ConnectionType.POWER_BOND:
+            if self.source.effective_domain != self.target.effective_domain:
+                raise ValueError(
+                    f"Domain mismatch: {self.source.name} ({self.source.effective_domain}) "
+                    f"cannot be connected to {self.target.name} ({self.target.effective_domain})."
+                )    
+        # Safe to mutate
+        self.source._attach_bond(self)
+        self.target._attach_bond(self)
 
     @property
     def name(self) -> str:
+        """Returns the source-to-target bond identifier."""
         return f"{self.source.name}--{self.target.name}"
+
+    def disconnect(self) -> None:
+        """Safely severs the bidirectional link between the bond and its ports."""
+        if self.source:
+            self.source._detach_bond()
+        if self.target:
+            self.target._detach_bond()
 
     @property
     def effort(self) -> str:
+        """Returns the effort symbol supplied by the causality assignment."""
         if self.causality == Causality.EFFORT_AT_SOURCE: # Causal stroke at the source port
             return self.target.effort
         elif self.causality == Causality.EFFORT_AT_TARGET: # Causal stroke at the target port
@@ -246,6 +336,7 @@ class Bond:
         
     @property
     def flow(self) -> str:
+        """Returns the flow symbol supplied by the causality assignment."""
         if self.causality == Causality.EFFORT_AT_SOURCE:
             return self.source.flow
         elif self.causality == Causality.EFFORT_AT_TARGET:
@@ -258,57 +349,59 @@ class Bond:
                 raise ValueError("Causality is not assigned.")
     @property
     def signal(self) -> str:
+        """Returns the source signal for a signal bond."""
         if self.connection_type != ConnectionType.SIGNAL_BOND:
             raise ValueError("Signal property is only valid for signal bonds.")
         return self.source.signal
 
 @dataclass(eq=False)
 class Component:
+    """Models a bond-graph element, its ports, parameters, states, and equations."""
     name: str
     component_type: ComponentType = ComponentType.CUSTOM
     initial_port_count: int = field(default=0, repr=False)
-    domain: Domain = Domain.ABSTRACT
+    domain: Domain | str = Domain.ABSTRACT
     non_invertible: bool = False # If True, the component has any constitutive relationship that cannot be algebraically inverted to solve for either effort or flow.
-    ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False)  
+    ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False) 
     # consider these later  
     parameters: dict[str, Any]  = field(default_factory=dict, repr=False, init=False)    
     states: dict[PowerVariable, StateVariable]  = field(default_factory=dict, repr=False, init=False)
     equations: list[ConstitutiveEquation] = field(default_factory=list, repr=False, init=False)
     # Optional callback to override the default linear equations
     equation_generator: Callable[[Component], list[ConstitutiveEquation]] | None = None
-
-    def __hash__(self) -> int:
-        # Hash only the unique string name, ignoring mutable fields like dicts
-        return hash(self.name)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Component):
-            return NotImplemented
-        return self.name == other.name
-    
-    @property
-    def port_count(self) -> int:
-        """Dynamically always returns the true number of ports."""
-        return len(self.ports)
-    
+        
     def __post_init__(self) -> None:
+        """Creates default ports based on the component type and requested count."""
         # --- Flexible Auto-Port Generation ---
         # 1. Determine how many ports to generate        
         if self.initial_port_count==0: # if not specified
             # Fallback to standard defaults if not specified
-            if self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MC, ComponentType.MI, ComponentType.MR, ComponentType.MSE, ComponentType.MSF):
+            if self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MC, 
+                                       ComponentType.MI, ComponentType.MR, ComponentType.MSE, 
+                                       ComponentType.MSF, ComponentType.Re):
                 self.initial_port_count = 2
-            elif self.component_type in (ComponentType.MTF, ComponentType.MGY, ComponentType.MIC):
+            elif self.component_type in (ComponentType.MTF, ComponentType.MGY, ComponentType.MIC, ComponentType.Re_GHK):
                 self.initial_port_count = 3
             else:
                 self.initial_port_count = 1 # by default, most components have at least one port
-                
+        else:
+            pass  # Use the user-specified initial_port_count        
         # 2. Generate the assigned number of ports
         for i in range(1, self.initial_port_count + 1):
             label = f"p{i}"
             port_type = self._get_port_type(i)
-            self.ports[label] = Port(label=label, component=self, port_type=port_type)
+            self.ports[label] = Port(label=label, component_ref=self, port_type=port_type)
 
+    @property
+    def port_count(self) -> int:
+        """Dynamically always returns the true number of ports."""
+        return len(self.ports)
+
+    @property
+    def bonds(self) -> set[Bond]:
+        """Dynamically computes active bonds directly from connected ports. Never out of sync."""
+        return {port.bond for port in self.ports.values() if port.bond is not None}
+    
     def _get_port_type(self, port_index: int) -> PortType:
         """Determines the default port type based on the component type and port index."""
         if self.component_type in (ComponentType.C, ComponentType.MC):
@@ -329,7 +422,8 @@ class Component:
         elif self.component_type in (ComponentType.SE, ComponentType.SF, ComponentType.MSE, ComponentType.MSF):
             # 1 and 2nd ports are power ports, others are signal ports
             return PortType.POWER_PORT if port_index == 1 else PortType.SIGNAL_PORT
-        elif self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MTF, ComponentType.MGY):
+        elif self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MTF, ComponentType.MGY, 
+                                     ComponentType.Re, ComponentType.Re_GHK):
             return PortType.POWER_PORT if port_index in (1, 2) else PortType.SIGNAL_PORT # 1st and 2nd ports are power, others are signal ports
         elif self.component_type == ComponentType.BLOCK:
             return PortType.SIGNAL_PORT
@@ -342,115 +436,41 @@ class Component:
         Enforces port count limits for standard n-port elements.
         """
         # Junctions can dynamically spawn infinite ports
-        if self.component_type in (ComponentType.ZERO, ComponentType.ONE):
+        if self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
             new_label = f"p{self.port_count + 1}"
-            new_port = Port(label=new_label, component=self, port_type=PortType.POWER_PORT)
+            new_port = Port(label=new_label, component_ref=self, port_type=PortType.POWER_PORT)
             self.ports[new_label] = new_port
             return [new_port]   
         # For all other elements, find an unconnected port
-        return [port for port in self.ports.values() if port.bond is None]             
-            
-    def generate_atomic_equations(self) -> None: # Check this later
-        self.equations.clear()
-        
-        if self.equation_generator is not None:
-            self.equations.extend(self.equation_generator(self))
-            return
-            
-        ports = list(self.ports.values())
-        if not ports:
-            return 
-            
-        # --- 1-Port Elements ---
-        if self.component_type in (ComponentType.R, ComponentType.C, ComponentType.I, ComponentType.SE, ComponentType.SF):
-            if len(ports) != 1:
-                raise ValueError(f"{self.component_type.name} requires exactly 1 port.")
-            p0 = ports[0]
-            
-            if self.component_type == ComponentType.R:
-                self.equations.append(ConstitutiveEquation(f"{p0.effort} - ({self.parameters['R']}) * {p0.flow}", "Linear Dissipation"))
-            elif self.component_type == ComponentType.C:
-                state = self.states[PowerVariable.QUANTITY]
-                self.equations.append(ConstitutiveEquation(f"{state.derivative_symbol} - {p0.flow}", "State Derivative"))
-                self.equations.append(ConstitutiveEquation(f"{p0.effort} - (1/({self.parameters['C']})) * {state.symbol}", "Linear Energy Storage"))
-            elif self.component_type == ComponentType.I:
-                state = self.states[PowerVariable.MOMENTUM]
-                self.equations.append(ConstitutiveEquation(f"{state.derivative_symbol} - {p0.effort}", "State Derivative"))
-                self.equations.append(ConstitutiveEquation(f"{p0.flow} - (1/({self.parameters['I']})) * {state.symbol}", "Linear Energy Storage"))
-            elif self.component_type == ComponentType.SE:
-                self.equations.append(ConstitutiveEquation(f"{p0.effort} - SE_{self.name}(t)", "Effort Source"))
-            elif self.component_type == ComponentType.SF:
-                self.equations.append(ConstitutiveEquation(f"{p0.flow} - SF_{self.name}(t)", "Flow Source"))
+        return [port for port in self.ports.values() if port.bond is None]  
 
-        # --- 2-Port Transducers ---
-        elif self.component_type in (ComponentType.TF, ComponentType.GY):
-            if len(ports) < 2:
-                raise ValueError(f"{self.component_type.name} requires at least 2 ports.")
-            p0, p1 = ports[0], ports[1]
-            
-            if self.component_type == ComponentType.TF:
-                m = self.parameters["m"]
-                self.equations.append(ConstitutiveEquation(f"{p0.effort} - ({m}) * {p1.effort}", "TF Effort Relation"))
-                self.equations.append(ConstitutiveEquation(f"({m}) * {p0.flow} - {p1.flow}", "TF Flow Relation"))   
-            elif self.component_type == ComponentType.GY:
-                r = self.parameters["r"]
-                self.equations.append(ConstitutiveEquation(f"{p0.effort} - ({r}) * {p1.flow}", "GY Relation 1"))
-                self.equations.append(ConstitutiveEquation(f"{p1.effort} - ({r}) * {p0.flow}", "GY Relation 2"))
-
-        # --- Junctions (Rigorous Sign Convention) ---
-        if self.component_type == ComponentType.ZERO:
-            # 0-Junction: Common Effort (e1 = e2 = e3...)
-            efforts = [p.effort for p in ports]
-            for i in range(1, len(efforts)):
-                self.equations.append(ConstitutiveEquation(f"{efforts[0]} - {efforts[i]}", "Common Effort"))               
-            # Conservation of Flow: Sum(f_in) - Sum(f_out) = 0
-            flow_terms = []
-            for p in ports:
-                if p.bond is None:
-                    continue
-                # If this port is the target of the bond, power flows INTO the junction (+)
-                if p.bond.target == p:
-                    flow_terms.append(f"+ {p.flow}")
-                # If this port is the source of the bond, power flows OUT of the junction (-)
-                else:
-                    flow_terms.append(f"- {p.flow}")                   
-            if flow_terms:
-                sum_flows = " ".join(flow_terms).lstrip("+ ") # Clean up leading plus sign
-                self.equations.append(ConstitutiveEquation(sum_flows, "Conservation of Flow"))
-
-        if self.component_type == ComponentType.ONE:
-            # 1-Junction: Common Flow (f1 = f2 = f3...)
-            flows = [p.flow for p in ports]
-            for i in range(1, len(flows)):
-                self.equations.append(ConstitutiveEquation(f"{flows[0]} - {flows[i]}", "Common Flow"))
-                
-            # Conservation of Effort: Sum(e_in) - Sum(e_out) = 0
-            effort_terms = []
-            for p in ports:
-                if p.bond is None:
-                    continue
-                # If this port is the target of the bond, power flows INTO the junction (+)
-                if p.bond.target == p:
-                    effort_terms.append(f"+ {p.effort}")
-                # If this port is the source of the bond, power flows OUT of the junction (-)
-                else:
-                    effort_terms.append(f"- {p.effort}")
-                    
-            if effort_terms:
-                sum_efforts = " ".join(effort_terms).lstrip("+ ") # Clean up leading plus sign
-                self.equations.append(ConstitutiveEquation(sum_efforts, "Conservation of Effort"))
-
+    def clean_unused_ports(self) -> None:
+        """Removes unbound ports if this component is a dynamically-sizing junction."""
+        if self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
+            empty_ports = [label for label, port in self.ports.items() if port.bond is None]
+            for label in empty_ports:
+                del self.ports[label]           
 
 class BondGraph:
+    """Owns a connected set of components and assigns bond causalities."""
+
     def __init__(self, name: str = "bond_graph") -> None:
+        """Initializes an empty named graph and causality diagnostics."""
         self.name = name
-        self.components: dict[str, Component] = {}
-        self.bonds: list[Bond] = []
+        self.components: dict[str, Component] = {} # Mapping of component names to Component objects
+        # Insertion-ordered mapping gives O(1) bond membership/deletion
+        # while retaining deterministic iteration order.
+        self._bonds: dict[Bond, None] = {}
 
         # Extended Diagnostic State
         self.derivative_causality_components: list[Component] = []
         self.algebraic_loops: list[list[Bond]] = []
         self.system_type: SystemType = SystemType.ODE
+
+    @property
+    def bonds(self):
+        """Insertion-ordered, set-like view of all bonds."""
+        return self._bonds.keys()
 
     def to_networkx(self) -> nx.DiGraph:
         """Maps the completed bond graph structure to a NetworkX DiGraph."""
@@ -502,7 +522,7 @@ class BondGraph:
             warnings.warn(f"Port '{port_label}' already exists on '{comp.name}'. Returning existing port.")
             return comp.ports[port_label]
 
-        if comp.component_type not in (ComponentType.ZERO, ComponentType.ONE):
+        if comp.component_type not in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
             if len(comp.ports) >= comp.initial_port_count:
                 warnings.warn(
                     f"Topology Error: Cannot add port '{port_label}' to '{comp.name}'. "
@@ -510,7 +530,7 @@ class BondGraph:
                 )
                 return None
 
-        new_port = Port(label=port_label, component=comp, **kwargs)
+        new_port = Port(label=port_label, component_ref=comp, **kwargs)
         comp.ports[port_label] = new_port
         return new_port
 
@@ -523,13 +543,11 @@ class BondGraph:
             return arg.get_free_port()
 
         if isinstance(arg, str):
-            if "." in arg:
+            if "." in arg: # If the string contains a dot, treat it as "component_name.port_label"
                 comp_name, port_label = arg.split(".", 1)
-                addPort=self.add_port(comp_name, port_label)
-                if not addPort:
-                    return []
-                return [addPort]
-            else:
+                newPort= self.add_port(comp_name, port_label)
+                return [newPort] if newPort else []
+            else: # If the string does not contain a dot, treat it as a component name and return its free ports
                 if arg in self.components:
                     return self._auto_get_port(self.components[arg])
                 else:
@@ -548,25 +566,20 @@ class BondGraph:
             warnings.warn("Each endpoint must resolve to exactly one port.")
             return None
         else:
-            src_port = src_port[0]
-            tgt_port = tgt_port[0]
-            # check if source and target from the same component
-            if src_port.component.name == tgt_port.component.name:
-                warnings.warn("Cannot create a bond between ports of the same component.")
-                return None
+            src_port, tgt_port = src_port[0], tgt_port[0]
             bond = Bond(source=src_port, target=tgt_port, **kwargs)
-            self.bonds.append(bond)
+            self._bonds[bond] = None
         return bond
 
-    def _get_bonds_for_component(self, comp_arg: Component | str) -> list[Bond]:
+    def _get_bonds_for_component(self, comp_arg: Component | str) -> set[Bond]:
         """Returns all bonds connected to a given component."""
         comp_name = comp_arg.name if isinstance(comp_arg, Component) else comp_arg
         comp = self.components.get(comp_name)
         if not comp:
             warnings.warn(f"Component '{comp_name}' not found in bond graph.")
-            return []
+            return set()
         else:
-            return [port.bond for port in comp.ports.values() if port.bond is not None]
+            return comp.bonds
     
     def _resolve_to_port(self, arg: Port | str) -> Port | None:
         """Resolves a Port, or String input into a valid Port object before deleting a bond."""
@@ -619,12 +632,18 @@ class BondGraph:
                 return 0
 
         deleted_count = 0
-        for bond in list(bonds_to_delete):
-            if bond in self.bonds:
-                bond.source.bond = None
-                bond.target.bond = None
-                self.bonds.remove(bond)
-                deleted_count += 1
+        for bond in bonds_to_delete:
+            if bond in self._bonds:
+               src_comp = bond.source.component
+               tgt_comp = bond.target.component                
+               # 1. Ask the bond to unhook itself from its ports
+               bond.disconnect()               
+               # 2. Remove it from the central graph registry
+               del self._bonds[bond]
+               deleted_count += 1               
+               # 3. Tell components to clean up any abandoned dynamic ports
+               src_comp.clean_unused_ports()
+               tgt_comp.clean_unused_ports()
 
         return deleted_count
 
@@ -636,12 +655,11 @@ class BondGraph:
             warnings.warn(f"Component '{comp_name}' not found in bond graph.")
             return
 
-        for bond in self._get_bonds_for_component(comp):
+        # delete_bond() mutates Component.bonds, so iterate over a snapshot.
+        for bond in list(self._get_bonds_for_component(comp)):
             self.delete_bond(bond)
 
         del self.components[comp.name]
-
-    
 
     def _get_bond_effort_direction(self, bond: Bond, component: Component) -> str | None:
         """Determines if effort is flowing 'IN' to or 'OUT' of the given component via this bond."""
@@ -694,16 +712,22 @@ class BondGraph:
             # Targets explicit non-invertibles, signal blocks, or locked switches
             if getattr(comp, "non_invertible", False):
                 for port in comp.ports.values():
-                    if port.bond and port.bond.causality == Causality.UNASSIGNED:
+                    if port.bond :
                         fixed_causality = getattr(port, "fixed_causality", None)
                         if fixed_causality == Causality.EFFORT_AT_SOURCE:
-                            port.bond.causality = (
+                            target_causality = (
                                 Causality.EFFORT_AT_TARGET if port.bond.source == port else Causality.EFFORT_AT_SOURCE
                             )
                         elif fixed_causality == Causality.EFFORT_AT_TARGET:
-                            port.bond.causality = (
+                            target_causality = (
                                 Causality.EFFORT_AT_SOURCE if port.bond.source == port else Causality.EFFORT_AT_TARGET
                             )
+                        else:
+                            raise ValueError(f"Non-invertible component '{comp.name}' has a port '{port.label}' without a fixed causality assignment.")
+
+                        if port.bond.causality != Causality.UNASSIGNED and port.bond.causality != target_causality:
+                            raise ValueError(f"Ill-Posed Model: Source conflict at '{comp.name}'.")
+                        port.bond.causality = target_causality
                         neighbor = port.bond.target.component if port.bond.source.component == comp else port.bond.source.component
                         step2_neighbors.append(neighbor)
 
@@ -762,15 +786,37 @@ class BondGraph:
         return self.system_type
 
     def _propagate_worklist(self, initial_components: list[Component]) -> None:
-        worklist = deque(initial_components)
+        """Propagates causality constraints through queued neighboring components."""
+        # Avoid duplicate queue entries: a component waiting in the queue
+        # does not need to be scheduled again.
+        worklist = deque()
+        queued: set[Component] = set()
+
+        for comp in initial_components:
+            if comp not in queued:
+                worklist.append(comp)
+                queued.add(comp)
+
         while worklist:
             comp = worklist.popleft()
-            self._propagate_component_causality(comp, worklist)
+            queued.discard(comp)
+            self._propagate_component_causality(comp, worklist, queued)
 
-    def _propagate_component_causality(self, comp: Component, worklist: deque[Component]) -> bool:
-        bonds = list(self._get_bonds_for_component(comp))
-        assigned_bonds = [b for b in bonds if b.causality != Causality.UNASSIGNED]
-        unassigned_bonds = [b for b in bonds if b.causality == Causality.UNASSIGNED]
+    def _propagate_component_causality(
+        self,
+        comp: Component,
+        worklist: deque[Component],
+        queued: set[Component],
+    ) -> bool:
+        """Applies the local junction or transducer causality rules for one component."""
+        
+        assigned_bonds: list[Bond] = []
+        unassigned_bonds: list[Bond] = []
+        for bond in self._get_bonds_for_component(comp):
+            if bond.causality == Causality.UNASSIGNED:
+                unassigned_bonds.append(bond)
+            else:
+                assigned_bonds.append(bond)
 
         if not unassigned_bonds:
             return False
@@ -833,26 +879,44 @@ class BondGraph:
 
         for b in changed_bonds:
             other_comp = b.target.component if b.source.component == comp else b.source.component
-            worklist.append(other_comp)
+            if other_comp not in queued:
+                worklist.append(other_comp)
+                queued.add(other_comp)
 
         return len(changed_bonds) > 0
 
     def _trace_algebraic_loop(self, start_comp: Component, initial_bond: Bond) -> list[Bond]:
-        visited_bonds = [initial_bond]
-        curr = initial_bond.target.component if initial_bond.source.component == start_comp else initial_bond.source.component
-        
-        while curr and curr != start_comp:
-            bonds = [b for b in self._get_bonds_for_component(curr) if b not in visited_bonds]
-            if not bonds:
-                break
-            # Simply traces the first unvisited branch; robust implementations may require DFS for branching networks
-            next_bond = bonds[0]
-            visited_bonds.append(next_bond)
-            curr = next_bond.target.component if next_bond.source.component == curr else next_bond.source.component
+        """Traces an unbranched path and returns it when it closes at the start."""
+        # Keep a set for O(1) visited-bond membership tests, while retaining
+        # a list for the returned path.
+        visited_bonds: set[Bond] = {initial_bond}
+        loop_path: list[Bond] = [initial_bond]
+        curr = (
+            initial_bond.target.component
+            if initial_bond.source.component == start_comp
+            else initial_bond.source.component
+        )
 
-        return visited_bonds if curr == start_comp else []
+        while curr and curr != start_comp:
+            next_bond = next(
+                (b for b in self._get_bonds_for_component(curr) if b not in visited_bonds),
+                None,
+            )
+            if next_bond is None:
+                break                                        
+                                                                                                            
+            visited_bonds.add(next_bond)
+            loop_path.append(next_bond)
+            curr = (
+                next_bond.target.component
+                if next_bond.source.component == curr
+                else next_bond.source.component
+            )
+
+        return loop_path if curr == start_comp else []
 
     def _classify_system(self) -> SystemType:
+        """Derives the system type from derivative causality and algebraic loops."""
         has_derivative = len(self.derivative_causality_components) > 0
         has_algebraic = len(self.algebraic_loops) > 0
 
