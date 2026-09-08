@@ -1,7 +1,6 @@
 from __future__ import annotations
-import weakref
 from enum import Enum, auto
-from dataclasses import dataclass, field,InitVar
+from dataclasses import dataclass, field
 from collections import deque
 from typing import  Any,Callable
 import warnings
@@ -157,25 +156,28 @@ class DomainRegistry:
 
     @classmethod
     def register(cls, domain: Domain | str, variables: dict[PowerVariable | str, PhysicalQuantity]) -> None:
-        """Registers a new domain or overwrites an existing one."""
-        # Ensure at least Effort and Flow are present, as they are mandatory for Bond Graph physics
-        if PowerVariable.EFFORT not in variables or PowerVariable.FLOW not in variables:
-            raise ValueError(f"Domain '{domain}' must define at least EFFORT and FLOW variables.")
-        
+        """Registers a new domain."""
+        if domain in cls._registry:
+            raise ValueError(
+                f"Domain '{domain}' is already registered."
+            )  
+        else:
+            cls._registry[domain] = variables
+    @classmethod
+    def replace(cls, domain: Domain | str, variables: dict[PowerVariable | str, PhysicalQuantity]) -> None:
+        """Overwrites an existing domain."""
         cls._registry[domain] = variables
 
     @classmethod
     def get_variables(cls, domain: 'Domain | str') -> dict[PowerVariable | str, PhysicalQuantity] | None:
         """Returns registered variable metadata for a domain, if present."""
         return cls._registry.get(domain)
-
-
 @dataclass
 class StateVariable:
     """Represents a time-integrated energy state of a component (q or p)."""
-    variable_type: PowerVariable
+    variable_type: PowerVariable | str
     component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
-
+    
     @property
     def symbol(self) -> str:
         """Returns the domain-specific state symbol qualified by component name."""
@@ -184,97 +186,80 @@ class StateVariable:
         if domain_dict and self.variable_type in domain_dict:
             base_symbol = domain_dict[self.variable_type].symbol
             return f"{base_symbol}_{self.component.name}"
-        
-        fallback = "q" if self.variable_type == PowerVariable.QUANTITY else "p"
-        return f"{fallback}_{self.component.name}"
+        else:
+            raise ValueError(f"Domain '{self.component.domain}' does not have a registered symbol for variable type '{self.variable_type}'.")
     @property
     def derivative_symbol(self) -> str:
         """Returns the time derivative of the state variable (x_dot)."""
         return f"d({self.symbol})/dt"
-
 @dataclass
 class ConstitutiveEquation:
     """Represents a single implicit relation: Phi(e, f, x, x_dot) = 0"""
     expression: Any  # Could be a string for now, or a sympy.Expr in a real solver
     description: str = ""
-
 @dataclass(eq=False)
 class Port:
     """Represents one typed connection point on a component."""
     label: str # the ports of each component are uniquely labelled
-    component_ref: InitVar[Component] # Take the strong ref during init
-    # Store the weak reference object (requires repr=False)
-    _component_weak: weakref.ReferenceType[Component] = field(init=False, repr=False)
+    component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
     port_type: PortType = PortType.POWER_PORT
-    fixed_causality: Causality | None = None # If set, this port's causality will not be changed during causality assignment. 
     domain: Domain | str = Domain.ABSTRACT
-    # Store the bond as a weak reference
-    _bond_weak: weakref.ReferenceType[Bond] | None = field(default=None, init=False, repr=False)
-
-    def __post_init__(self, component_ref: Component) -> None:
-        """Keeps a weak link to the owning component after initialization."""
-        # Use weakref.ref instead of weakref.proxy
-        self._component_weak = weakref.ref(component_ref)
+    fixed_causality: Causality | None = None # If set, this port's causality will not be changed during causality assignment.
+    bond: Bond | None = field(default=None, repr=False, init=False)     
 
     @property
-    def bond(self) -> 'Bond | None':
-        """Returns the connected bond, or `None` when the port is free."""
-        if self._bond_weak is None:
-            return None
-        return self._bond_weak() # Resolves the weak reference to the actual Bond object
-    
-    def _attach_bond(self, bond: Bond) -> None:
-        """Associates this free port with a newly created bond."""
-        if self.bond is not None:
-            raise ValueError(f"Port {self.name} is already connected.")
-        self._bond_weak = weakref.ref(bond)
-
-    def _detach_bond(self) -> None:
-        """Clears the bond association when the bond is removed."""
-        self._bond_weak = None
-
-    @property
-    def component(self) -> Component:
-        """Returns the live component that owns this port."""
-        # Calling the weakref object '()' returns the original, strongly-referenced Component.
-        # This original Component is perfectly hashable and safe for your sets.
-        comp = self._component_weak()
-        if comp is None:
-            raise RuntimeError(f"The parent component of port '{self.label}' has been destroyed.")
-        return comp
+    def name(self) -> str:
+        """Returns the fully qualified `<component>.<port>` identifier."""
+        return f"{self.component.name}.{self.label}"    
     
     @property
     def effective_domain(self) -> Domain | str:
         """Returns the port override domain or its component's domain."""
         return self.domain if self.domain != Domain.ABSTRACT else self.component.domain
-
-    @property
-    def name(self) -> str:
-        """Returns the fully qualified `<component>.<port>` identifier."""
-        return f"{self.component.name}.{self.label}"
     
-    def _get_symbol(self, variable_type: PowerVariable, default_prefix: str) -> str:
+    def _get_symbol(self, variable_type: PowerVariable) -> str:
         """Builds a qualified variable symbol using the effective domain registry."""
         # Query the new registry
         domain_dict = DomainRegistry.get_variables(self.effective_domain)
         if domain_dict and variable_type in domain_dict:
             return f"{domain_dict[variable_type].symbol}_{self.name}"
-        return f"{default_prefix}_{self.name}"
+        raise ValueError(f"Domain '{self.component.domain}' does not have a registered symbol for variable type '{variable_type}'.")
+
+    def _attach_bond(self, bond: Bond) -> None:
+        """Attaches a bond to this port."""
+        self.bond = bond
+        self.component.hold_port(self) # Mark the port as held when a bond is attached
+        self.component.bonds.add(bond) # Add the bond to the component's bond set
+
+    def _detach_bond(self, bond: Bond) -> None:
+        """Detaches the bond from this port."""
+        if self.bond is not bond:
+            raise ValueError( f"Port '{self.name}' is not connected to the specified bond." )
+        self.component.bonds.discard(self.bond) # Remove the bond from the component's bond set
+        self.bond = None
+        self.component.release_port(self) # Mark the port as free when a bond is detached        
 
     @property
     def effort(self) -> str:
         """Returns this port's effort-variable symbol."""
-        return self._get_symbol(PowerVariable.EFFORT, "e")
-
+        return self._get_symbol(PowerVariable.EFFORT)
     @property
     def flow(self) -> str:
         """Returns this port's flow-variable symbol."""
-        return self._get_symbol(PowerVariable.FLOW, "f")
+        return self._get_symbol(PowerVariable.FLOW)
+    @property
+    def quantity(self) -> str:
+        """Returns this port's quantity-variable symbol."""
+        return self._get_symbol(PowerVariable.QUANTITY)
+    @property
+    def momentum(self) -> str:
+        """Returns this port's momentum-variable symbol."""
+        return self._get_symbol(PowerVariable.MOMENTUM)
 
     @property
     def signal(self) -> str:
         """Returns this port's signal-variable symbol."""
-        return self._get_symbol(PowerVariable.SIGNAL, "s")
+        return self._get_symbol(PowerVariable.SIGNAL)
 
 @dataclass(eq=False)
 class Bond:
@@ -286,25 +271,7 @@ class Bond:
 
     def __post_init__(self) -> None:
         """Validates endpoints and atomically attaches the bond to both ports."""
-        # Enforce structural invariants
-        if self.source.component is self.target.component:
-            raise ValueError("Cannot create a bond between ports on the same component.")
-            
-        # Look-ahead check (prevents partial connections!)
-        if self.source.bond is not None:
-            raise ValueError(f"Source port {self.source.name} is already connected.")
-        if self.target.bond is not None:
-            raise ValueError(f"Target port {self.target.name} is already connected.")        
 
-        # Enforce domain compatibility (for power bonds)
-        # Note: Signal bonds are exempt from this check
-        if self.connection_type == ConnectionType.POWER_BOND:
-            if self.source.effective_domain != self.target.effective_domain:
-                raise ValueError(
-                    f"Domain mismatch: {self.source.name} ({self.source.effective_domain}) "
-                    f"cannot be connected to {self.target.name} ({self.target.effective_domain})."
-                )    
-        # Safe to mutate
         self.source._attach_bond(self)
         self.target._attach_bond(self)
 
@@ -315,10 +282,79 @@ class Bond:
 
     def disconnect(self) -> None:
         """Safely severs the bidirectional link between the bond and its ports."""
-        if self.source:
-            self.source._detach_bond()
-        if self.target:
-            self.target._detach_bond()
+        self.source._detach_bond(self)
+        self.target._detach_bond(self)
+
+    def validate_connection(self) -> None:
+        """Validates the bond's source and target ports."""
+        Bond.validate(self.source, self.target, self.connection_type)
+    
+    @staticmethod
+    def validate(
+        source: Port,
+        target: Port,
+        connection_type: ConnectionType = ConnectionType.POWER_BOND,
+    ) -> None:
+
+        if source is target:
+            raise ValueError(
+                f"Cannot create a bond from port '{source.name}' to itself."
+            )
+
+        if source.component is target.component:
+            raise ValueError(
+                "Cannot create a bond between ports on the same component."
+            )
+
+        if source.bond is not None:
+            raise ValueError(
+                f"Source port {source.name} is already connected to a bond."
+            )
+
+        if target.bond is not None:
+            raise ValueError(
+                f"Target port {target.name} is already connected to a bond."
+            )
+
+        if connection_type == ConnectionType.POWER_BOND:
+            valid_power_types = (
+                PortType.POWER_PORT,
+                PortType.C_TYPE_PORT,
+                PortType.I_TYPE_PORT,
+            )
+
+            if source.port_type not in valid_power_types:
+                raise ValueError(
+                    f"Source port {source.name} is not a valid power port."
+                )
+
+            if target.port_type not in valid_power_types:
+                raise ValueError(
+                    f"Target port {target.name} is not a valid power port."
+                )
+
+            if source.effective_domain != target.effective_domain:
+                raise ValueError(
+                    f"Domain mismatch: {source.name} "
+                    f"({source.effective_domain}) cannot be connected to "
+                    f"{target.name} ({target.effective_domain})."
+                )
+
+        elif connection_type == ConnectionType.SIGNAL_BOND:
+            if source.port_type is not PortType.SIGNAL_PORT:
+                raise ValueError(
+                    f"Source port {source.name} is not a valid signal port."
+                )
+
+            if target.port_type is not PortType.SIGNAL_PORT:
+                raise ValueError(
+                    f"Target port {target.name} is not a valid signal port."
+                )
+
+        else:
+            raise ValueError(
+                f"Unsupported connection type: {connection_type!r}."
+            )
 
     @property
     def effort(self) -> str:
@@ -358,12 +394,17 @@ class Bond:
 class Component:
     """Models a bond-graph element, its ports, parameters, states, and equations."""
     name: str
-    component_type: ComponentType = ComponentType.CUSTOM
-    initial_port_count: int = field(default=0, repr=False)
+    component_type: ComponentType | str = ComponentType.CUSTOM
     domain: Domain | str = Domain.ABSTRACT
     non_invertible: bool = False # If True, the component has any constitutive relationship that cannot be algebraically inverted to solve for either effort or flow.
-    ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False) 
-    # consider these later  
+    # Optional parameters strictly for ComponentType.CUSTOM
+    custom_power_ports: list[Causality | None] = field(default_factory=list) # List of Causality enums for each custom power port
+    custom_signal_ports: int = 0
+    ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False)
+    _available_ports: deque[Port] = field(default_factory=deque, repr=False,   init=False) # track which ports are available for new bonds  
+    _next_port_number: int = field(default=1, repr=False, init=False) # only used for junctions, to auto-label new ports
+    bonds: set[Bond] = field(default_factory=set, repr=False, init=False) 
+    # consider the following later  
     parameters: dict[str, Any]  = field(default_factory=dict, repr=False, init=False)    
     states: dict[PowerVariable, StateVariable]  = field(default_factory=dict, repr=False, init=False)
     equations: list[ConstitutiveEquation] = field(default_factory=list, repr=False, init=False)
@@ -372,85 +413,146 @@ class Component:
         
     def __post_init__(self) -> None:
         """Creates default ports based on the component type and requested count."""
-        # --- Flexible Auto-Port Generation ---
-        # 1. Determine how many ports to generate        
-        if self.initial_port_count==0: # if not specified
-            # Fallback to standard defaults if not specified
-            if self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MC, 
-                                       ComponentType.MI, ComponentType.MR, ComponentType.MSE, 
-                                       ComponentType.MSF, ComponentType.Re):
-                self.initial_port_count = 2
-            elif self.component_type in (ComponentType.MTF, ComponentType.MGY, ComponentType.MIC, ComponentType.Re_GHK):
-                self.initial_port_count = 3
-            else:
-                self.initial_port_count = 1 # by default, most components have at least one port
-        else:
-            pass  # Use the user-specified initial_port_count        
-        # 2. Generate the assigned number of ports
-        for i in range(1, self.initial_port_count + 1):
-            label = f"p{i}"
-            port_type = self._get_port_type(i)
-            self.ports[label] = Port(label=label, component_ref=self, port_type=port_type)
+        # 1-Port Elements
+        if self.component_type in (ComponentType.R, ComponentType.SE, ComponentType.SF ):
+            p1=self._add_port("p1")
+            self._available_ports.append(p1) # For 1-port elements, the single port is always available for bonding
+        elif self.component_type == ComponentType.C:
+            p1=self._add_port("p1", port_type=PortType.C_TYPE_PORT)
+            self._available_ports.append(p1)
+        elif self.component_type == ComponentType.I:
+            p1=self._add_port("p1", port_type=PortType.I_TYPE_PORT)
+            self._available_ports.append(p1)
+        # 2-Port Elements
+        elif self.component_type in (ComponentType.TF, ComponentType.GY):
+            p1=self._add_port("p1")
+            p2=self._add_port("p2")
+            self._available_ports.extend([p1, p2])
+        elif self.component_type in (ComponentType.MSE, ComponentType.MSF):
+            p1=self._add_port("p1")
+            p2=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2])
+        elif self.component_type == ComponentType.IC:
+            p1=self._add_port("p1", port_type=PortType.I_TYPE_PORT)
+            p2=self._add_port("p2", port_type=PortType.C_TYPE_PORT)
+            self._available_ports.extend([p1, p2])
+        elif self.component_type == ComponentType.MC:
+            p1=self._add_port("p1", port_type=PortType.C_TYPE_PORT)
+            p2=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2])
+        elif self.component_type == ComponentType.MI:
+            p1=self._add_port("p1", port_type=PortType.I_TYPE_PORT)
+            p2=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2])
+        # Reaction Elements
+        elif self.component_type == ComponentType.Re:
+            p1=self._add_port("p1",fixed_causality=Causality.EFFORT_AT_SOURCE)
+            p2=self._add_port("p2", fixed_causality=Causality.EFFORT_AT_SOURCE)
+            self._available_ports.extend([p1, p2])
+            self.non_invertible = True # Reactions are generally non-invertible due to their nonlinear constitutive relationships
+        # 3-Port Elements
+        elif self.component_type == ComponentType.MIC:
+            p1=self._add_port("p1", port_type=PortType.I_TYPE_PORT)
+            p2=self._add_port("p2", port_type=PortType.C_TYPE_PORT)
+            p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2, p3])
+        elif self.component_type == ComponentType.Re_GHK:
+            p1=self._add_port("p1", fixed_causality=Causality.EFFORT_AT_SOURCE)
+            p2=self._add_port("p2", fixed_causality=Causality.EFFORT_AT_SOURCE)
+            p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2, p3])
+            self.non_invertible = True # Modulated storage elements are generally non-invertible due to their nonlinear constitutive relationships
+        elif self.component_type in (ComponentType.MTF, ComponentType.MGY):
+            p1=self._add_port("p1")
+            p2=self._add_port("p2")
+            p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            self._available_ports.extend([p1, p2, p3])
+        elif self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
+            pass # Junctions dynamically allocate ports as needed; no default ports are created.
+        elif self.component_type == ComponentType.BLOCK:
+            for i in range(1, self.custom_signal_ports + 1):
+                p = self._add_port(f"s{i}", port_type=PortType.SIGNAL_PORT)
+                self._available_ports.append(p)
+        else: # component_type == ComponentType.CUSTOM or any other unrecognized type 
+            # For custom components, create the specified number of power and signal ports
+            # check that custom_power_ports is a list of Causality or None
+            if not isinstance(self.custom_power_ports, list) or not all(isinstance(c, (Causality, type(None))) for c in self.custom_power_ports):
+                raise ValueError("custom_power_ports must be a list of Causality or None.")
+            # if there is any fixed causality in custom_power_ports, then the component is non-invertible
+            if any(c is not None for c in self.custom_power_ports):
+                self.non_invertible = True
+            for i in range(1, len(self.custom_power_ports) + 1):
+                p = self._add_port(f"p{i}", port_type=PortType.POWER_PORT, fixed_causality=self.custom_power_ports[i - 1])
+                self._available_ports.append(p)
+            for i in range(1, self.custom_signal_ports + 1):
+                p = self._add_port(f"s{i}", port_type=PortType.SIGNAL_PORT)
+                self._available_ports.append(p)
 
     @property
     def port_count(self) -> int:
         """Dynamically always returns the true number of ports."""
         return len(self.ports)
 
-    @property
-    def bonds(self) -> set[Bond]:
-        """Dynamically computes active bonds directly from connected ports. Never out of sync."""
-        return {port.bond for port in self.ports.values() if port.bond is not None}
-    
-    def _get_port_type(self, port_index: int) -> PortType:
-        """Determines the default port type based on the component type and port index."""
-        if self.component_type in (ComponentType.C, ComponentType.MC):
-            return PortType.C_TYPE_PORT if port_index ==1 else PortType.SIGNAL_PORT # 1st port is C-type, others are signal ports
-        elif self.component_type in (ComponentType.I, ComponentType.MI):
-            return PortType.I_TYPE_PORT if port_index ==1 else PortType.SIGNAL_PORT # 1st port is I-type, others are signal ports
-        elif self.component_type in (ComponentType.IC, ComponentType.MIC):
-            # For IC or MIC, we can alternate or assign based on index
-            # 1st port is C-type, 2nd port is I-type, others are signal ports
-            if port_index == 1:
-                return PortType.C_TYPE_PORT
-            elif port_index == 2:
-                return PortType.I_TYPE_PORT
-            else:
-                return PortType.SIGNAL_PORT
-        elif self.component_type in (ComponentType.R, ComponentType.MR):
-            return PortType.POWER_PORT if port_index == 1 else PortType.SIGNAL_PORT # 1st port is power, others are signal ports
-        elif self.component_type in (ComponentType.SE, ComponentType.SF, ComponentType.MSE, ComponentType.MSF):
-            # 1 and 2nd ports are power ports, others are signal ports
-            return PortType.POWER_PORT if port_index == 1 else PortType.SIGNAL_PORT
-        elif self.component_type in (ComponentType.TF, ComponentType.GY, ComponentType.MTF, ComponentType.MGY, 
-                                     ComponentType.Re, ComponentType.Re_GHK):
-            return PortType.POWER_PORT if port_index in (1, 2) else PortType.SIGNAL_PORT # 1st and 2nd ports are power, others are signal ports
-        elif self.component_type == ComponentType.BLOCK:
-            return PortType.SIGNAL_PORT
+    def _add_port(self, label: str, **kwargs) -> Port:
+        if label in self.ports: # uniqueness check for port labels
+            raise ValueError(f"Port '{label}' already exists on component '{self.name}'.")       
+        new_port = Port(label=label, component=self, **kwargs)
+        self.ports[label] = new_port
+        return new_port
+
+    def release_port(self, port: Port) -> None:
+        if port.bond is not None:
+            raise ValueError(
+                f"Cannot release connected port '{port.name}'."
+            )
+        if port.component is not self:
+            raise ValueError(
+                f"Port '{port.name}' does not belong to component '{self.name}'."
+            )    
+        if port not in self._available_ports:
+            self._available_ports.append(port)
         else:
-            return PortType.POWER_PORT  # Default to power port for other types
+            warnings.warn(f"Port '{port.name}' is already marked as available."); 
 
-    def get_free_port(self) -> list[Port]:
-        """
-        Returns the available ports, or spawns a new one for junctions.
-        Enforces port count limits for standard n-port elements.
-        """
-        # Junctions can dynamically spawn infinite ports
-        if self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
-            new_label = f"p{self.port_count + 1}"
-            new_port = Port(label=new_label, component_ref=self, port_type=PortType.POWER_PORT)
-            self.ports[new_label] = new_port
-            return [new_port]   
-        # For all other elements, find an unconnected port
-        return [port for port in self.ports.values() if port.bond is None]  
+    def hold_port(self, port: Port) -> None:
+        if port.bond is None:
+            raise ValueError(
+                f"Cannot hold unconnected port '{port.name}'."
+            )
+        if port.component is not self:
+            raise ValueError(
+                f"Port '{port.name}' does not belong to component '{self.name}'."
+            )    
+        if port in self._available_ports:
+            self._available_ports.remove(port)
+        else:
+            warnings.warn(f"Port '{port.name}' is already marked as held.");
+    
+    def get_or_create_port(self) -> Port:
+        # This method is only relevant for junctions (0, 1, X0, X1). It creates a new one port.
+        if self.component_type in (
+            ComponentType.ZERO,
+            ComponentType.ONE,
+            ComponentType.XZERO,
+            ComponentType.XONE,
+        ):
+            if self._available_ports:
+                return self._available_ports[0]  # Return the first available free port
+            else: # Create a new one.
+                label = f"p{self._next_port_number}" 
+                self._next_port_number += 1
+                port = self._add_port(label)
+                self._available_ports.append(port)  # Mark the new port as available for bonding              
+                return port
+        else:
+            raise ValueError(
+                f"Component '{self.name}' of type '{self.component_type}' does not support dynamic port allocation."
+            )   
 
-    def clean_unused_ports(self) -> None:
-        """Removes unbound ports if this component is a dynamically-sizing junction."""
-        if self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
-            empty_ports = [label for label, port in self.ports.items() if port.bond is None]
-            for label in empty_ports:
-                del self.ports[label]           
-
+    def get_available_ports(self) -> list[Port]:
+        """Returns a list of currently unconnected ports."""
+        # This method is only relevant for non-junction components. For junctions, use `allocate_port()` to get a free port or create a new one.
+        return list(self._available_ports)
 class BondGraph:
     """Owns a connected set of components and assigns bond causalities."""
 
@@ -467,6 +569,24 @@ class BondGraph:
         self.algebraic_loops: list[list[Bond]] = []
         self.system_type: SystemType = SystemType.ODE
 
+    def _resolve_string(self, arg: str) -> Port | Component |None:
+        """Resolves a String input into a valid Port object """
+        if "." in arg:
+            comp_name, port_label = arg.split(".", 1)
+            comp = self.components.get(comp_name)
+            if comp and port_label in comp.ports:
+                return comp.ports[port_label]
+            else:
+                warnings.warn(f"Port '{port_label}' not found on component '{comp_name}'.")
+                return None               
+        else:
+            comp = self.components.get(arg)
+            if comp:
+                return comp
+            else:
+                warnings.warn(f"Component '{arg}' not found in bond graph.")
+                return None  
+    
     @property
     def bonds(self):
         """Insertion-ordered, set-like view of all bonds."""
@@ -498,79 +618,64 @@ class BondGraph:
     def add_component(self, component: Component | str, **kwargs) -> Component:
         """Adds a component to internal tracking."""
         if isinstance(component, str):
-            comp_obj = Component(name=component, **kwargs)
+            if component in self.components:
+                raise ValueError(f"Component '{component}' already exists.")
+            else:
+                comp_obj = Component(name=component, **kwargs)
         else:
-            comp_obj = component
-
-        if comp_obj.name in self.components:
-            warnings.warn(f"Component '{comp_obj.name}' already exists.")
-            return self.components[comp_obj.name]
-
+            if component.name in self.components:
+                raise ValueError(f"Component '{component.name}' already exists.")
+            else:
+                comp_obj = component
+        # Add the component to the graph's registry
         self.components[comp_obj.name] = comp_obj
         return comp_obj
 
-    def add_port(self, comp_arg: Component | str, port_label: str, **kwargs) -> Port | None:
-        """Creates a new port on a component, enforcing element port limits."""
-        comp_name = comp_arg.name if isinstance(comp_arg, Component) else comp_arg
-        comp = self.components.get(comp_name)
-        
-        if not comp:
-            warnings.warn(f"Component '{comp_name}' not found in bond graph.")
-            return None
-
-        if port_label in comp.ports:
-            warnings.warn(f"Port '{port_label}' already exists on '{comp.name}'. Returning existing port.")
-            return comp.ports[port_label]
-
-        if comp.component_type not in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
-            if len(comp.ports) >= comp.initial_port_count:
-                warnings.warn(
-                    f"Topology Error: Cannot add port '{port_label}' to '{comp.name}'. "
-                    f"Component type {comp.component_type.name} is strictly limited to {comp.initial_port_count} port(s)."
-                )
-                return None
-
-        new_port = Port(label=port_label, component_ref=comp, **kwargs)
-        comp.ports[port_label] = new_port
-        return new_port
-
-    def _auto_get_port(self, arg: Port | Component | str) -> list[Port]:
-        """Resolves Port, Component, or String inputs into a valid Port object before adding a bond."""
+    def _resolve_endpoint(self, arg: Port | Component | str) -> Port | None:
+        """Resolves a Port, Component, or String input into a valid Port object before adding a bond."""
         if isinstance(arg, Port):
-            return [arg]
-
-        if isinstance(arg, Component):
-            return arg.get_free_port()
-
-        if isinstance(arg, str):
-            if "." in arg: # If the string contains a dot, treat it as "component_name.port_label"
-                comp_name, port_label = arg.split(".", 1)
-                newPort= self.add_port(comp_name, port_label)
-                return [newPort] if newPort else []
-            else: # If the string does not contain a dot, treat it as a component name and return its free ports
-                if arg in self.components:
-                    return self._auto_get_port(self.components[arg])
+            return arg
+        elif isinstance(arg, Component):
+            available_ports = arg.get_available_ports()
+            if len(available_ports) == 1:
+                return available_ports[0]  # Return the first available free port
+            else:
+                # For junctions, allocate a free port or create a new one
+                if arg.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
+                    return arg.get_or_create_port()  # Dynamically allocate a new port if none are free
                 else:
-                    warnings.warn(f"Component '{arg}' not found.")
-                    return []
-
-        warnings.warn(f"Cannot resolve bond endpoint from type: {type(arg)}")
-        return []
-
+                    warnings.warn(f"Component '{arg.name}' has {len(available_ports)} free ports, please specify which one to use.")
+                    return None
+        elif isinstance(arg, str):
+            resolved = self._resolve_string(arg)
+            if isinstance(resolved, Port):
+                return resolved
+            elif isinstance(resolved, Component):
+                return self._resolve_endpoint(resolved)  # Recursively resolve the component to a port
+            else:
+                warnings.warn(f"Could not resolve '{arg}' to a valid port or component.")
+                return None
+        else:
+            warnings.warn(f"Invalid argument type: {type(arg)}. Expected Port, Component, or str.")
+            return None
+   
     def add_bond(self, source: Component | Port | str, target: Component | Port | str, **kwargs) -> Bond | None:
         """Creates a bond between two endpoints."""
-        src_port = self._auto_get_port(source)
-        tgt_port = self._auto_get_port(target)
-
-        if len(src_port) != 1 or len(tgt_port) != 1:
-            warnings.warn("Each endpoint must resolve to exactly one port.")
-            return None
-        else:
-            src_port, tgt_port = src_port[0], tgt_port[0]
+        src_port = self._resolve_endpoint(source)
+        tgt_port = self._resolve_endpoint(target)     
+        if src_port is not None and tgt_port is not None:
+            try:
+                Bond.validate(src_port, tgt_port, kwargs.get('connection_type', ConnectionType.POWER_BOND))
+            except ValueError as e:
+                warnings.warn(f"Failed to create bond: {e}")
+                return None            
             bond = Bond(source=src_port, target=tgt_port, **kwargs)
-            self._bonds[bond] = None
-        return bond
-
+            self._bonds[bond] = None   
+            return bond          
+        else:
+            warnings.warn("Could not resolve both source and target ports for bond creation.")
+            return None
+       
     def _get_bonds_for_component(self, comp_arg: Component | str) -> set[Bond]:
         """Returns all bonds connected to a given component."""
         comp_name = comp_arg.name if isinstance(comp_arg, Component) else comp_arg
@@ -610,8 +715,8 @@ class BondGraph:
             else:
                 bonds_to_delete.append(arg1)
         else:
-            if (isinstance(arg1, Port) or (isinstance(arg1, str) and "." in arg1)) and \
-               (isinstance(arg2, Port) or (isinstance(arg2, str) and "." in arg2)):
+            if (isinstance(arg1, Port) or isinstance(arg1, str)) and \
+               (isinstance(arg2, Port) or isinstance(arg2, str)):
                 p1 = self._resolve_to_port(arg1)
                 p2 = self._resolve_to_port(arg2)
                 if not p1 or not p2:
@@ -622,7 +727,6 @@ class BondGraph:
                 else:
                     warnings.warn("Ports are not connected by the same bond. No bonds deleted.")
                     return 0
-
             elif isinstance(arg1, (Component, str)) and isinstance(arg2, (Component, str)):
                 bonds_c1 = self._get_bonds_for_component(arg1)
                 bonds_c2 = self._get_bonds_for_component(arg2)
@@ -633,17 +737,14 @@ class BondGraph:
 
         deleted_count = 0
         for bond in bonds_to_delete:
-            if bond in self._bonds:
-               src_comp = bond.source.component
-               tgt_comp = bond.target.component                
+            if bond in self._bonds:            
                # 1. Ask the bond to unhook itself from its ports
-               bond.disconnect()               
+               bond.disconnect()            
                # 2. Remove it from the central graph registry
                del self._bonds[bond]
-               deleted_count += 1               
-               # 3. Tell components to clean up any abandoned dynamic ports
-               src_comp.clean_unused_ports()
-               tgt_comp.clean_unused_ports()
+               deleted_count += 1  
+            else:
+                warnings.warn(f"Bond '{bond.name}' not found in the graph. It may have already been deleted.")             
 
         return deleted_count
 
@@ -942,10 +1043,21 @@ class BondGraph:
 
         # Render Component Nodes
         for comp_name, comp in self.components.items():
-            if comp.component_type in (ComponentType.ONE, ComponentType.ZERO):
-                label = comp.component_type.name
+            label=''
+            if comp.component_type in (ComponentType.ONE, ComponentType.ZERO, ComponentType.XONE, ComponentType.XZERO):
+                if comp.component_type == ComponentType.ONE:
+                    label = "1"
+                elif comp.component_type == ComponentType.ZERO:
+                    label = "0"
+                elif comp.component_type == ComponentType.XONE:
+                    label = "X1"
+                elif comp.component_type == ComponentType.XZERO:
+                    label = "X0"
             else:
-                label = f"{comp.component_type.name}: {comp_name}"
+                if isinstance(comp.component_type, ComponentType):
+                    label = f"{comp.component_type.name}: {comp_name}"
+                else:
+                    label = f"{comp.component_type}: {comp_name}"
 
             dot.node(comp_name, label=label)
 
