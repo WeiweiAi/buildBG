@@ -61,16 +61,6 @@ class PortType(Enum):
     SIGNAL_PORT = auto() # Port for signal interface (control signals)
     C_TYPE_PORT = auto() # Port for C-type storage (integrates flow to quantity), is a power port
     I_TYPE_PORT = auto() # Port for I-type storage (integrates effort to momentum), is a power port
-
-class Causality(Enum):
-    """Records which end of a bond receives effort."""
-    EFFORT_AT_SOURCE = auto() # Causal stroke at the source port, 
-                              # i.e., the source port receives the effort (input) from the bond and the target port provides the effort (output) to the bond.
-                              # i.e., the source port provides the flow (output) to the bond and the target port receives the flow (input) from the bond.
-    EFFORT_AT_TARGET = auto() # Causal stroke at the target port, 
-                              # i.e., the target port receives the effort (input) from the bond and the source port provides the effort (output) to the bond.
-                              # i.e., the target port provides the flow (output) to the bond and the source port receives the flow (input) from the bond.
-    UNASSIGNED = auto()
 class ConstitutiveRelationship(Enum):
     """Lists supported implicit constitutive-equation forms."""
     PHI_C=auto() # q - PHI_C(e) = 0
@@ -204,7 +194,8 @@ class Port:
     component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
     port_type: PortType = PortType.POWER_PORT
     domain: Domain | str = Domain.ABSTRACT
-    fixed_causality: Causality | None = None # If set, this port's causality will not be changed during causality assignment.
+    fixed_causality: bool | None = field(default=None, repr=False)# If set, this port's causality will not be changed during causality assignment.
+    causality: bool | None = field(default=None, repr=False) # True if causal stroke is at this port (receiving effort), None if unassigned;
     bond: Bond | None = field(default=None, repr=False, init=False)     
 
     @property
@@ -267,13 +258,85 @@ class Bond:
     source: Port
     target: Port
     connection_type: ConnectionType = ConnectionType.POWER_BOND
-    causality: Causality = Causality.UNASSIGNED
 
     def __post_init__(self) -> None:
         """Validates endpoints and atomically attaches the bond to both ports."""
 
         self.source._attach_bond(self)
         self.target._attach_bond(self)
+
+    def get_other_port(self, port: Port) -> Port:
+        """Returns the opposite port of the bond given one endpoint."""
+        if port is self.source:
+            return self.target
+        elif port is self.target:
+            return self.source
+        else:
+            raise ValueError(
+                f"Port '{port.name}' is not connected to this bond."
+            )
+    def get_other_component(self, component: Component) -> Component:
+        """Returns the opposite component of the bond given one endpoint."""
+        if component is self.source.component:
+            return self.target.component
+        elif component is self.target.component:
+            return self.source.component
+        else:
+            raise ValueError(
+                f"Component '{component.name}' is not connected to this bond."
+            )
+    def validate_causality(self) -> None:
+        source = self.source.causality
+        target = self.target.causality
+    
+        if source is None and target is None:
+            return
+    
+        if source is None or target is None:
+            raise ValueError(
+                f"Bond '{self.name}' has partially assigned causality."
+            )
+    
+        if source == target:
+            raise ValueError(
+                f"Bond '{self.name}' has conflicting causality: "
+                "both endpoints have the same causality."
+            )
+    def has_causality_conflict(self) -> bool | None:
+        if self.source.causality is None or self.target.causality is None:
+            return None # Causality is unassigned for at least one port
+        return self.source.causality == self.target.causality
+
+    def assign_causality(self,port: Port, target_causality: bool) -> bool:
+        """Assigns causality to the bond's source and target ports, given a target causality for the specified port."""
+        if check := self.has_causality_conflict():
+            raise ValueError(
+                f"Cannot assign causality: source '{self.source.name}' and target '{self.target.name}' have conflicting causality assignments or unassigned ports."
+            )
+        other_port = self.get_other_port(port)
+
+        if port.causality is not None:
+            if port.causality != target_causality:
+                raise ValueError(f"Cannot assign causality: port '{port.name}' already has a conflicting causality assignment.")
+
+        if port.fixed_causality is not None:
+            if port.fixed_causality != target_causality:
+                raise ValueError(f"Cannot assign causality: port '{port.name}' has a fixed causality that conflicts with the target causality.")
+        other_causality = not target_causality
+
+        if other_port.causality is not None:
+            if other_port.causality != other_causality:
+                raise ValueError(f"Cannot assign causality: port '{other_port.name}' already has a conflicting causality assignment.")
+
+        if other_port.fixed_causality is not None:
+            if other_port.fixed_causality != other_causality:
+                raise ValueError(f"Cannot assign causality: port '{other_port.name}' has a fixed causality that conflicts with the target causality.")
+
+        # Commit only after all validation succeeds.
+        port.causality = target_causality
+        other_port.causality = other_causality
+
+        return True # Successfully assigned causality to the specified port; the other port's causality will be the opposite.
 
     @property
     def name(self) -> str:
@@ -359,9 +422,10 @@ class Bond:
     @property
     def effort(self) -> str:
         """Returns the effort symbol supplied by the causality assignment."""
-        if self.causality == Causality.EFFORT_AT_SOURCE: # Causal stroke at the source port
+        self.validate_connection()  # Ensure the bond is valid before accessing effort
+        if self.source.causality : # Causal stroke at the source port
             return self.target.effort
-        elif self.causality == Causality.EFFORT_AT_TARGET: # Causal stroke at the target port
+        elif self.target.causality: # Causal stroke at the target port
             return self.source.effort
         else:
             if self.connection_type == ConnectionType.SIGNAL_BOND:
@@ -373,9 +437,10 @@ class Bond:
     @property
     def flow(self) -> str:
         """Returns the flow symbol supplied by the causality assignment."""
-        if self.causality == Causality.EFFORT_AT_SOURCE:
+        self.validate_connection()  # Ensure the bond is valid before accessing flow
+        if self.source.causality:
             return self.source.flow
-        elif self.causality == Causality.EFFORT_AT_TARGET:
+        elif self.target.causality:
             return self.target.flow
         else:
             if self.connection_type == ConnectionType.SIGNAL_BOND:
@@ -398,7 +463,7 @@ class Component:
     domain: Domain | str = Domain.ABSTRACT
     non_invertible: bool = False # If True, the component has any constitutive relationship that cannot be algebraically inverted to solve for either effort or flow.
     # Optional parameters strictly for ComponentType.CUSTOM
-    custom_power_ports: list[Causality | None] = field(default_factory=list) # List of Causality enums for each custom power port
+    custom_power_ports: list[bool | None] = field(default_factory=list) # List of Causality enums for each custom power port
     custom_signal_ports: int = 0
     ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False)
     _available_ports: deque[Port] = field(default_factory=deque, repr=False,   init=False) # track which ports are available for new bonds  
@@ -446,8 +511,8 @@ class Component:
             self._available_ports.extend([p1, p2])
         # Reaction Elements
         elif self.component_type == ComponentType.Re:
-            p1=self._add_port("p1",fixed_causality=Causality.EFFORT_AT_SOURCE)
-            p2=self._add_port("p2", fixed_causality=Causality.EFFORT_AT_SOURCE)
+            p1=self._add_port("p1",fixed_causality=True)
+            p2=self._add_port("p2", fixed_causality=True)
             self._available_ports.extend([p1, p2])
             self.non_invertible = True # Reactions are generally non-invertible due to their nonlinear constitutive relationships
         # 3-Port Elements
@@ -457,8 +522,8 @@ class Component:
             p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
         elif self.component_type == ComponentType.Re_GHK:
-            p1=self._add_port("p1", fixed_causality=Causality.EFFORT_AT_SOURCE)
-            p2=self._add_port("p2", fixed_causality=Causality.EFFORT_AT_SOURCE)
+            p1=self._add_port("p1", fixed_causality=True)
+            p2=self._add_port("p2", fixed_causality=True)
             p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
             self.non_invertible = True # Modulated storage elements are generally non-invertible due to their nonlinear constitutive relationships
@@ -476,8 +541,8 @@ class Component:
         else: # component_type == ComponentType.CUSTOM or any other unrecognized type 
             # For custom components, create the specified number of power and signal ports
             # check that custom_power_ports is a list of Causality or None
-            if not isinstance(self.custom_power_ports, list) or not all(isinstance(c, (Causality, type(None))) for c in self.custom_power_ports):
-                raise ValueError("custom_power_ports must be a list of Causality or None.")
+            if not isinstance(self.custom_power_ports, list) or not all(isinstance(c, (bool, type(None))) for c in self.custom_power_ports):
+                raise ValueError("custom_power_ports must be a list of bool or None.")
             # if there is any fixed causality in custom_power_ports, then the component is non-invertible
             if any(c is not None for c in self.custom_power_ports):
                 self.non_invertible = True
@@ -609,8 +674,7 @@ class BondGraph:
                 bond.source.name, 
                 bond.target.name, 
                 object=bond, 
-                kind="bond",
-                causality=bond.causality.name
+                kind="bond"
             )
             
         return G
@@ -764,75 +828,55 @@ class BondGraph:
 
     def _get_bond_effort_direction(self, bond: Bond, component: Component) -> str | None:
         """Determines if effort is flowing 'IN' to or 'OUT' of the given component via this bond."""
-        if bond.causality == Causality.UNASSIGNED:
-            return None
+        if bond.source.causality is None or bond.target.causality is None:
+            return None # Causality not yet assigned for this bond
             
         if bond.source.component == component:
-            return "OUT" if bond.causality == Causality.EFFORT_AT_TARGET else "IN"
+            return "IN" if bond.source.causality  else "OUT"
         elif bond.target.component == component:
-            return "IN" if bond.causality == Causality.EFFORT_AT_TARGET else "OUT"
+            return "IN" if bond.target.causality  else "OUT"
         return None
 
     def assign_causality(self) -> SystemType:
         """Executes the Generalized Extended SCAP framework."""
-        for bond in self.bonds:
-            bond.causality = Causality.UNASSIGNED
-            
+
+        for comp in self.components.values():
+            for port in comp.ports.values():
+                port.causality = port.fixed_causality   
+
         self.derivative_causality_components = []
         self.algebraic_loops = []
 
         # =====================================================================
         # STEP 1: Fixed Causality Type 1a (Independent & Modulated Sources)
         # =====================================================================
-        step1_neighbors: list[Component] = []
+        step123_neighbors: list[Component] = []
         for comp in self.components.values():
             if comp.component_type in (ComponentType.SE, ComponentType.MSE, ComponentType.SF, ComponentType.MSF):
                 for port in comp.ports.values():
-                    if port.bond:
+                    if port.bond: # active bond
                         is_effort_source = comp.component_type in (ComponentType.SE, ComponentType.MSE)
-                        target_causality = (
-                            Causality.EFFORT_AT_TARGET if port.bond.source == port else Causality.EFFORT_AT_SOURCE
-                        ) if is_effort_source else (
-                            Causality.EFFORT_AT_SOURCE if port.bond.source == port else Causality.EFFORT_AT_TARGET
-                        )
-
-                        if port.bond.causality != Causality.UNASSIGNED and port.bond.causality != target_causality:
-                            raise ValueError(f"Ill-Posed Model: Source conflict at '{comp.name}'.")
-
-                        port.bond.causality = target_causality
-                        neighbor = port.bond.target.component if port.bond.source.component == comp else port.bond.source.component
-                        step1_neighbors.append(neighbor)
-
-        self._propagate_worklist(step1_neighbors)
-
+                        if is_effort_source:
+                            target_causality = False # provides effort and receives flow
+                        else:
+                            target_causality = True # receives effort and provides flow
+                        port.bond.assign_causality(port, target_causality)
+                        neighbor = port.bond.get_other_component(comp)
+                        step123_neighbors.append(neighbor)
         # =====================================================================
         # STEP 2: Fixed Causality Type 1b (Non-Invertible / Blocks / Switched)
         # =====================================================================
-        step2_neighbors: list[Component] = []
         for comp in self.components.values():
             # Targets explicit non-invertibles, signal blocks, or locked switches
             if getattr(comp, "non_invertible", False):
                 for port in comp.ports.values():
                     if port.bond :
-                        fixed_causality = getattr(port, "fixed_causality", None)
-                        if fixed_causality == Causality.EFFORT_AT_SOURCE:
-                            target_causality = (
-                                Causality.EFFORT_AT_TARGET if port.bond.source == port else Causality.EFFORT_AT_SOURCE
-                            )
-                        elif fixed_causality == Causality.EFFORT_AT_TARGET:
-                            target_causality = (
-                                Causality.EFFORT_AT_SOURCE if port.bond.source == port else Causality.EFFORT_AT_TARGET
-                            )
+                        if port.fixed_causality is not None:
+                            port.bond.assign_causality(port, port.fixed_causality)
                         else:
-                            raise ValueError(f"Non-invertible component '{comp.name}' has a port '{port.label}' without a fixed causality assignment.")
-
-                        if port.bond.causality != Causality.UNASSIGNED and port.bond.causality != target_causality:
-                            raise ValueError(f"Ill-Posed Model: Source conflict at '{comp.name}'.")
-                        port.bond.causality = target_causality
-                        neighbor = port.bond.target.component if port.bond.source.component == comp else port.bond.source.component
-                        step2_neighbors.append(neighbor)
-
-        self._propagate_worklist(step2_neighbors)
+                            pass                       
+                        neighbor = port.bond.get_other_component(comp)
+                        step123_neighbors.append(neighbor)
 
         # =====================================================================
         # STEP 3: Preferred Causality (Integral Causality for Storage Elements)
@@ -846,43 +890,51 @@ class BondGraph:
                         # For mixed IC/MIC, check port-level definitions; fallback to component level
                         pref_causality = None
                         if port.port_type == PortType.C_TYPE_PORT:
-                            pref_causality = Causality.EFFORT_AT_TARGET if port.bond.source == port else Causality.EFFORT_AT_SOURCE
+                            pref_causality = False
                         elif port.port_type == PortType.I_TYPE_PORT:
-                            pref_causality = Causality.EFFORT_AT_SOURCE if port.bond.source == port else Causality.EFFORT_AT_TARGET
+                            pref_causality = True
+                        if pref_causality is None:
+                            continue # Skip if no preferred causality can be determined for this port
+                        if port.causality is None:
+                            port.bond.assign_causality(port, pref_causality)
+                            neighbor = port.bond.get_other_component(comp)
+                            step123_neighbors.append(neighbor)
+                        elif port.causality != pref_causality:
+                            port.bond.assign_causality(port, not pref_causality)
+                            if comp not in self.derivative_causality_components:
+                                self.derivative_causality_components.append(comp)
 
-                        if pref_causality:
-                            if port.bond.causality == Causality.UNASSIGNED:
-                                port.bond.causality = pref_causality
-                                neighbor = port.bond.target.component if port.bond.source.component == comp else port.bond.source.component
-                                self._propagate_worklist([neighbor])
-                            elif port.bond.causality != pref_causality:
-                                if comp not in self.derivative_causality_components:
-                                    self.derivative_causality_components.append(comp)
-
+        self._propagate_worklist(step123_neighbors)
         # =====================================================================
         # STEP 4: Arbitrary / Free Causality & Algebraic Loop Inventory
         # =====================================================================
         for comp in self.components.values():
             if comp.component_type in (ComponentType.R, ComponentType.MR):
                 for port in comp.ports.values():
-                    if port.bond and port.bond.causality == Causality.UNASSIGNED:
+                    if port.bond :
                         # Assign arbitrary effort out
-                        port.bond.causality = (
-                            Causality.EFFORT_AT_SOURCE if port.bond.source == port else Causality.EFFORT_AT_TARGET
-                        )
-                        
+                        if port.causality is None:
+                            if other_port := port.bond.get_other_port(port):
+                                if other_port.causality is None:
+                                    port.bond.assign_causality(port, True) # Effort at source, flow at target
+                                else:
+                                    port.bond.assign_causality(port, not other_port.causality)  
+                        else:
+                            port.bond.assign_causality(port, port.causality) # Effort at source, flow at target                      
                         # Trace if this choice formed an algebraic loop back to itself
                         loop_bonds = self._trace_algebraic_loop(comp, port.bond)
                         if loop_bonds:
                             self.algebraic_loops.append(loop_bonds)
 
-                        neighbor = port.bond.target.component if port.bond.source.component == comp else port.bond.source.component
+                        neighbor = port.bond.get_other_component(comp)
                         self._propagate_worklist([neighbor])
 
-        unassigned = [b for b in self.bonds if b.causality == Causality.UNASSIGNED]
+        unassigned = [b for b in self.bonds if b.source.causality is None or b.target.causality is None]
         if unassigned:
+            print(f"Unassigned bonds: {[b.name for b in unassigned]}")
             raise RuntimeError(f"SCAP failed: {len(unassigned)} bond(s) remained unassigned. Check ill-posed structures or disconnected loops.")
-
+        for bond in self.bonds:
+            bond.validate_connection() # Ensure all bonds are valid after causality assignment
         self.system_type = self._classify_system()
         return self.system_type
 
@@ -914,7 +966,7 @@ class BondGraph:
         assigned_bonds: list[Bond] = []
         unassigned_bonds: list[Bond] = []
         for bond in self._get_bonds_for_component(comp):
-            if bond.causality == Causality.UNASSIGNED:
+            if bond.source.causality is None or bond.target.causality is None:
                 unassigned_bonds.append(bond)
             else:
                 assigned_bonds.append(bond)
@@ -926,18 +978,16 @@ class BondGraph:
 
         # 0-Junction & Switched 0-Junction (1 Effort IN constraint)
         if comp.component_type in (ComponentType.ZERO, ComponentType.XZERO):
-            effort_in = sum(1 for b in assigned_bonds if self._get_bond_effort_direction(b, comp) == "IN")
-            
+            effort_in = sum(1 for b in assigned_bonds if self._get_bond_effort_direction(b, comp) == "IN")       
             if effort_in > 1:
                 raise ValueError(f"Causality Conflict: 0-Junction '{comp.name}' has {effort_in} effort inputs (max 1).")
-
             if effort_in == 1:
                 for b in unassigned_bonds:
-                    b.causality = Causality.EFFORT_AT_TARGET if b.source.component == comp else Causality.EFFORT_AT_SOURCE
+                    b.assign_causality(b.source, False) if b.source.component == comp else b.assign_causality(b.source, True)
                     changed_bonds.append(b)
             elif len(unassigned_bonds) == 1 and effort_in == 0:
                 b = unassigned_bonds[0]
-                b.causality = Causality.EFFORT_AT_SOURCE if b.source.component == comp else Causality.EFFORT_AT_TARGET
+                b.assign_causality(b.source, False) if b.source.component == comp else b.assign_causality(b.source, True)
                 changed_bonds.append(b)
 
         # 1-Junction & Switched 1-Junction (1 Effort OUT constraint)
@@ -949,33 +999,37 @@ class BondGraph:
 
             if effort_out == 1:
                 for b in unassigned_bonds:
-                    b.causality = Causality.EFFORT_AT_SOURCE if b.source.component == comp else Causality.EFFORT_AT_TARGET
+                    b.assign_causality(b.source, True) if b.source.component == comp else b.assign_causality(b.source, False)
                     changed_bonds.append(b)
             elif len(unassigned_bonds) == 1 and effort_out == 0:
                 b = unassigned_bonds[0]
-                b.causality = Causality.EFFORT_AT_TARGET if b.source.component == comp else Causality.EFFORT_AT_SOURCE
+                b.assign_causality(b.source, True) if b.source.component == comp else b.assign_causality(b.source, False)
                 changed_bonds.append(b)
 
         # Transformers (TF, MTF)
         elif comp.component_type in (ComponentType.TF, ComponentType.MTF) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
             assigned_dir = self._get_bond_effort_direction(assigned_bonds[0], comp)
             b = unassigned_bonds[0]
-            b.causality = (
-                (Causality.EFFORT_AT_TARGET if b.source.component == comp else Causality.EFFORT_AT_SOURCE)
-                if assigned_dir == "IN" else
-                (Causality.EFFORT_AT_SOURCE if b.source.component == comp else Causality.EFFORT_AT_TARGET)
-            )
+            if assigned_dir is None:
+                raise ValueError(f"Cannot determine effort direction for assigned bond on component '{comp.name}'.")
+            else:
+                if assigned_dir == "IN":
+                    b.assign_causality(b.source, False) if b.source.component == comp else b.assign_causality(b.source, True)
+                else:
+                    b.assign_causality(b.source, True) if b.source.component == comp else b.assign_causality(b.source, False)
             changed_bonds.append(b)
 
         # Gyrators (GY, MGY)
         elif comp.component_type in (ComponentType.GY, ComponentType.MGY) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
             assigned_dir = self._get_bond_effort_direction(assigned_bonds[0], comp)
             b = unassigned_bonds[0]
-            b.causality = (
-                (Causality.EFFORT_AT_SOURCE if b.source.component == comp else Causality.EFFORT_AT_TARGET)
-                if assigned_dir == "IN" else
-                (Causality.EFFORT_AT_TARGET if b.source.component == comp else Causality.EFFORT_AT_SOURCE)
-            )
+            if assigned_dir is None:
+                raise ValueError(f"Cannot determine effort direction for assigned bond on component '{comp.name}'.")
+            else:
+                if assigned_dir == "IN":
+                    b.assign_causality(b.source, True) if b.source.component == comp else b.assign_causality(b.source, False)
+                else:
+                    b.assign_causality(b.source, False) if b.source.component == comp else b.assign_causality(b.source, True)
             changed_bonds.append(b)
 
         for b in changed_bonds:
@@ -1070,11 +1124,11 @@ class BondGraph:
             dir_style = "forward"
             power_arrow = "halfopen"
 
-            if bond.causality == Causality.EFFORT_AT_TARGET:
+            if bond.target.causality == True:
                 # Power arrow AND Causal stroke at target end
                 arrowhead = f"tee{power_arrow}"
                 arrowtail = "none"
-            elif bond.causality == Causality.EFFORT_AT_SOURCE:
+            elif bond.source.causality == True:
                 # Power arrow at target end, Causal stroke at source end
                 arrowhead = power_arrow
                 arrowtail = "tee"
@@ -1110,9 +1164,9 @@ def print_causality_table(bg: BondGraph) -> None:
         src = b.source.component.name
         tgt = b.target.component.name
 
-        if b.causality == Causality.EFFORT_AT_TARGET:
+        if b.target.causality == True:
             direction = f"{src} |-----> {tgt}"
-        elif b.causality == Causality.EFFORT_AT_SOURCE:
+        elif b.source.causality == True:
             direction = f"{src} <-----| {tgt}"
         else:
             direction = f"{src} ------- {tgt} (UNASSIGNED)"
