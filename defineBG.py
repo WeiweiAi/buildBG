@@ -9,6 +9,7 @@ import graphviz
 
 # Sequential Causality Assignment Procedure (SCAP)
 # Karnopp, Dean. "Alternative bond graph causal patterns and equation formulations for dynamic systems." (1983): 58-63.
+
 class ComponentType(Enum):
     """Categorizes physical, junction, transducer, and control components."""
     # Borutzky, Wolfgang. Bond graph modelling of engineering systems. Vol. 103. New York: springer, 2011.
@@ -42,6 +43,8 @@ class ComponentType(Enum):
     BLOCK = auto()  # All nodes that only have signal ports and represent mathematical relations between these signals.
     # User-defined / Custom
     CUSTOM = auto() # User-defined component   
+
+JUNCTIONS = {ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO,  ComponentType.XONE }
 class PowerVariable(Enum):
     """Identifies the effort, flow, state, and signal variables of a domain."""
     EFFORT = auto() # e.g., voltage, force, pressure
@@ -187,6 +190,31 @@ class ConstitutiveEquation:
     """Represents a single implicit relation: Phi(e, f, x, x_dot) = 0"""
     expression: Any  # Could be a string for now, or a sympy.Expr in a real solver
     description: str = ""
+
+@dataclass(frozen=True)
+class JunctionPropagation:
+    determining_junction_port: Port # The port on the junction determining the effort (zero junction) or flow (one junction) values.
+    determining_component_port: Port # The port of a component connected to determining_junction_port
+    propagated_expression: str
+    changed: bool
+
+@dataclass(frozen=True)
+class JunctionRule:
+    propagated_variable: str
+    conserved_variable: str
+    determining_causality: bool
+
+ZERO_RULE = JunctionRule(
+    propagated_variable="effort",
+    conserved_variable="flow",
+    determining_causality=True,
+)
+
+ONE_RULE = JunctionRule(
+    propagated_variable="flow",
+    conserved_variable="effort",
+    determining_causality=False,
+)
 @dataclass(eq=False)
 class Port:
     """Represents one typed connection point on a component."""
@@ -900,7 +928,10 @@ class BondGraph:
                             neighbor = port.bond.get_other_component(comp)
                             step123_neighbors.append(neighbor)
                         elif port.causality != pref_causality:
-                            port.bond.assign_causality(port, not pref_causality)
+                            # Preferred causality was already lost.
+                            # Preserve the existing assignment and make sure
+                            # the opposite endpoint is assigned consistently.
+                            port.bond.assign_causality(port, port.causality)
                             if comp not in self.derivative_causality_components:
                                 self.derivative_causality_components.append(comp)
 
@@ -934,7 +965,7 @@ class BondGraph:
             print(f"Unassigned bonds: {[b.name for b in unassigned]}")
             raise RuntimeError(f"SCAP failed: {len(unassigned)} bond(s) remained unassigned. Check ill-posed structures or disconnected loops.")
         for bond in self.bonds:
-            bond.validate_connection() # Ensure all bonds are valid after causality assignment
+            bond.validate_causality() # Ensure all bonds are valid after causality assignment
         self.system_type = self._classify_system()
         return self.system_type
 
@@ -1082,7 +1113,660 @@ class BondGraph:
         elif has_algebraic:
             return SystemType.DAE_ALGEBRAIC
         return SystemType.ODE
+    
+    def _get_port_for_component(
+            self,
+            bond: Bond,
+            component: Component,
+        ) -> Port:
+            if bond.source.component is component:
+                return bond.source
 
+            if bond.target.component is component:
+                return bond.target
+
+            raise RuntimeError(
+                f"Bond '{bond.name}' is not connected to "
+                f"component '{component.name}'."
+            )
+    def _initialize_component_variables(self, variable_expr: dict) -> None:
+        
+
+        for comp in self.components.values():
+            if comp.component_type in JUNCTIONS:
+                continue
+
+            for port in comp.ports.values():
+                if port.bond is None:
+                    continue
+
+                if port.causality is True:
+                    # Component receives effort and provides flow.
+                    variable_expr[port]["flow"] = port.flow
+
+                elif port.causality is False:
+                    # Component receives flow and provides effort.
+                    variable_expr[port]["effort"] = port.effort
+
+                else:
+                    raise RuntimeError(
+                        f"Port '{port.name}' has no assigned causality."
+                    )
+    def _propagate_across_bond(
+            self,
+            port: Port,
+            variable: str,
+            expression: str,
+            variable_expr: dict,
+        ) -> bool:
+
+            bond = port.bond
+
+            if bond is None:
+                raise RuntimeError(
+                    f"Port '{port.name}' is not connected to a bond."
+                )
+
+            other_port = bond.get_other_port(port)
+
+            existing = variable_expr[other_port][variable]
+
+            if existing is None:
+                variable_expr[other_port][variable] = expression
+                return True
+
+            if existing != expression:
+                raise ValueError(
+                    f"Conflicting {variable} expressions at "
+                    f"port '{other_port.name}': "
+                    f"'{existing}' vs '{expression}'."
+                )
+
+            return False 
+    def _set_variable_expression(
+            self,
+            variable_expr: dict,
+            port: Port,
+            variable: str,
+            expression: str,
+        ) -> bool:
+            """Set an expression and report whether it was newly established."""
+
+            current = variable_expr[port][variable]
+
+            if current is None:
+                variable_expr[port][variable] = expression
+                return True
+
+            if current != expression:
+                raise ValueError(
+                    f"Conflicting {variable} expressions for "
+                    f"port '{port.name}': "
+                    f"'{current}' versus '{expression}'."
+                )
+
+            return False
+    def _propagate_junction(
+            self,
+            junction: Component,
+            rule: JunctionRule,
+            variable_expr: dict,
+        ) -> JunctionPropagation | None:
+
+            power_bonds = [
+                bond
+                for bond in junction.bonds
+                if bond.connection_type == ConnectionType.POWER_BOND
+            ]
+
+            if len(power_bonds) < 2:
+                return None
+
+            junction_ports = [
+                self._get_port_for_component(bond, junction)
+                for bond in power_bonds
+            ]
+
+            source_ports = [
+                port
+                for port in junction_ports
+                if port.causality is rule.determining_causality
+            ]
+
+            if len(source_ports) != 1:
+                raise ValueError(
+                    f"Junction '{junction.name}' must have exactly one "
+                    f"causal source port with causality="
+                    f"{rule.determining_causality}; found {len(source_ports)}."
+                )
+
+            source_port = source_ports[0]
+
+            if source_port.bond is None:
+                raise RuntimeError(
+                    f"Junction port '{source_port.name}' has no bond."
+                )
+
+            source_other_port = source_port.bond.get_other_port(source_port)
+
+            expression = variable_expr[source_other_port][
+                rule.propagated_variable
+            ]
+
+            if expression is None:
+                return None
+
+            changed = False
+
+            # The junction-side variable is not needed in the final equations,
+            # but keeping it in the propagation map is useful internally.
+            if variable_expr[source_port][rule.propagated_variable] is None:
+                variable_expr[source_port][rule.propagated_variable] = expression
+                changed = True
+
+            for port in junction_ports:
+                if port is source_port:
+                    continue
+                
+                bond = port.bond
+                if bond is None:
+                    continue
+                
+                other_port = bond.get_other_port(port)
+
+                if self._set_variable_expression(
+                    variable_expr,
+                    other_port,
+                    rule.propagated_variable,
+                    expression,
+                ):
+                    changed = True
+
+            return JunctionPropagation(
+                determining_junction_port=source_port,
+                determining_component_port=source_other_port,
+                propagated_expression=expression,
+                changed=changed,
+            )  
+    def _generate_component_input_equations(
+            self,
+            variable_expr,
+        ) -> list[ConstitutiveEquation]:
+
+            equations = []
+
+            junction_types = {
+                ComponentType.ZERO,
+                ComponentType.ONE,
+                ComponentType.XZERO,
+                ComponentType.XONE,
+            }
+
+            for comp in self.components.values():
+            
+                if comp.component_type in junction_types:
+                    continue
+                
+                for port in comp.ports.values():
+                
+                    if port.bond is None:
+                        continue
+                    
+                    if port.causality is True:
+                        expr = variable_expr[port]["effort"]
+
+                        if expr is None:
+                           continue
+
+                        equations.append(
+                            ConstitutiveEquation(
+                                f"{port.effort} = ({expr})",
+                                f"Network effort equation for {port.name}",
+                            )
+                        )
+
+                    elif port.causality is False:
+                        expr = variable_expr[port]["flow"]
+
+                        if expr is None:
+                            continue
+
+                        equations.append(
+                            ConstitutiveEquation(
+                                f"{port.flow} = ({expr})",
+                                f"Network flow equation for {port.name}",
+                            )
+                        )
+
+            return equations 
+    def _junction_conservation(
+            self,
+            junction: Component,
+            rule: JunctionRule,
+            state: JunctionPropagation,
+        ) -> ConstitutiveEquation | None:
+            """
+            Generate the junction conservation equation in solved form.
+
+            The dependent variable is determined by the source_port already
+            identified during propagation.
+
+            No junction-port symbols are used in the final equation.
+            """
+
+            terms: list[tuple[int, str, Port]] = []
+
+            for bond in junction.bonds:
+            
+                if bond.connection_type != ConnectionType.POWER_BOND:
+                    continue
+                
+                junction_port = self._get_port_for_component(
+                    bond,
+                    junction,
+                )
+
+                other_port = bond.get_other_port(junction_port)
+
+                if junction_port is bond.target:
+                    sign = +1
+                elif junction_port is bond.source:
+                    sign = -1
+                else:
+                    raise RuntimeError(
+                        f"Bond '{bond.name}' is inconsistent with "
+                        f"junction '{junction.name}'."
+                    )
+
+                expression = getattr(
+                    other_port,
+                    rule.conserved_variable,
+                )
+
+                terms.append(
+                    (
+                        sign,
+                        expression,
+                        other_port,
+                    )
+                )
+
+            if len(terms) < 2:
+                return None
+
+            # ---------------------------------------------------------------
+            # Reuse the source port identified during propagation.
+            # Its opposite port is the dependent non-junction variable.
+            # ---------------------------------------------------------------
+            dependent_port = state.determining_component_port
+
+            dependent_term = next(
+                (
+                    (sign, expression, port)
+                    for sign, expression, port in terms
+                    if port is dependent_port
+                ),
+                None,
+            )
+
+            if dependent_term is None:
+                raise RuntimeError(
+                    f"Dependent port '{dependent_port.name}' was not found "
+                    f"in the conservation terms for junction "
+                    f"'{junction.name}'."
+                )
+
+            dependent_sign, dependent_expression, _ = dependent_term
+
+            # ---------------------------------------------------------------
+            # Solve:
+            #
+            #     s_d*x_d + Σ s_i*x_i = 0
+            #
+            # for x_d:
+            #
+            #     x_d = -1/s_d * Σ s_i*x_i
+            #
+            # Since s_d = ±1:
+            #
+            #     x_d = Σ (-s_i*s_d)*x_i
+            # ---------------------------------------------------------------
+            rhs_terms: list[str] = []
+
+            for sign, expression, port in terms:
+            
+                if port is dependent_port:
+                    continue
+                
+                rhs_sign = -sign * dependent_sign
+
+                if not rhs_terms:
+                    prefix = "" if rhs_sign > 0 else "-"
+                else:
+                    prefix = " + " if rhs_sign > 0 else " - "
+
+                rhs_terms.append(
+                    f"{prefix}({expression})"
+                )
+
+            rhs = "".join(rhs_terms)
+
+            if not rhs:
+                rhs = "0"
+
+            return ConstitutiveEquation(
+                f"({dependent_expression}) = {rhs}",
+                f"{junction.component_type.name}-junction "
+                f"'{junction.name}': "
+                f"{rule.conserved_variable} conservation",
+            )
+    def _resolve_variable_expression(
+        self,
+        port: Port,
+        variable: str,
+        variable_expr: dict,
+    ) -> str:
+
+        expression = variable_expr[port][variable]
+
+        if expression is not None:
+            return expression
+
+        if port.component.component_type not in (
+            ComponentType.ZERO,
+            ComponentType.ONE,
+            ComponentType.XZERO,
+            ComponentType.XONE,
+        ):
+            # For a non-junction, its own symbol is allowed.
+            return getattr(port, variable)
+
+        raise RuntimeError(
+            f"Could not resolve {variable} for junction port "
+            f"'{port.name}' without using a junction variable."
+        )
+    def _generate_junction_equations(
+            self,
+            junction: Component,
+            variable_expr: dict,
+        ) -> list[ConstitutiveEquation]:
+
+            if junction.component_type in (
+                ComponentType.ZERO,
+                ComponentType.XZERO,
+            ):
+                rule = ZERO_RULE
+
+            elif junction.component_type in (
+                ComponentType.ONE,
+                ComponentType.XONE,
+            ):
+                rule = ONE_RULE
+
+            else:
+                return []
+
+            state = self._propagate_junction(
+                junction,
+                rule,
+                variable_expr,
+            )
+
+            if state is None:
+                return []
+
+            equation = self._junction_conservation(
+                junction,
+                rule,
+                state,
+            )
+
+            return [equation] if equation is not None else []
+    def _propagate_junction_variables(
+            self,
+            variable_expr: dict,
+        ) -> dict[Component, JunctionPropagation]:
+            """
+            Propagate known junction variables until no further propagation
+            is possible.
+
+            Returns the propagation state for each junction that was
+            successfully resolved.
+            """
+
+            junctions = [
+                comp
+                for comp in self.components.values()
+                if comp.component_type in (
+                    ComponentType.ZERO,
+                    ComponentType.ONE,
+                    ComponentType.XZERO,
+                    ComponentType.XONE,
+                )
+            ]
+
+            propagation_states: dict[Component, JunctionPropagation] = {}
+
+            changed = True
+
+            while changed:
+                changed = False
+
+                for junction in junctions:
+                
+                    if junction.component_type in (
+                        ComponentType.ZERO,
+                        ComponentType.XZERO,
+                    ):
+                        rule = ZERO_RULE
+
+                    elif junction.component_type in (
+                        ComponentType.ONE,
+                        ComponentType.XONE,
+                    ):
+                        rule = ONE_RULE
+
+                    else:
+                        continue
+                    
+                    state = self._propagate_junction(
+                        junction,
+                        rule,
+                        variable_expr,
+                    )
+
+                    if state is not None:
+                        propagation_states[junction] = state
+
+                        # The generic propagation function should return
+                        # whether any new variable expression was established.
+                        if state.changed:
+                            changed = True
+
+            return propagation_states
+    def generate_network_equations(self) -> list[ConstitutiveEquation]:
+            """
+            Generate the network equations after SCAP causality assignment.
+
+            Workflow
+            --------
+            1. Initialize component-side known effort/flow variables.
+            2. Propagate the common variable through 0/1 junctions.
+            3. Generate input equations for non-junction components.
+            4. Generate solved-form conservation equations for junctions.
+
+            Causality convention
+            --------------------
+            port.causality is True:
+                port receives effort
+                → component provides flow
+                → effort is supplied by the network
+
+            port.causality is False:
+                port provides effort
+                → component receives flow
+                → flow is supplied by the network
+
+            Junction equations do not contain junction-port symbols.
+            """
+            # ------------------------------------------------------------------
+            # 0. Require completed causality assignment
+            # ------------------------------------------------------------------
+            for bond in self.bonds:
+                if bond.source.causality is None or bond.target.causality is None:
+                    raise RuntimeError(
+                        f"Cannot generate equations: bond '{bond.name}' "
+                        "has unassigned causality."
+                    )
+
+                if bond.source.causality == bond.target.causality:
+                    raise RuntimeError(
+                        f"Cannot generate equations: bond '{bond.name}' "
+                        "has invalid causality; both endpoints have the "
+                        f"same value ({bond.source.causality})."
+                    )
+
+            # ------------------------------------------------------------------
+            # 1. Create the propagation map.
+            #
+            # None means:
+            #   "this variable has not been determined by network propagation."
+            #
+            # We deliberately do NOT use "" because an empty string is not
+            # semantically different from a missing expression.
+            # ------------------------------------------------------------------
+            variable_expr: dict[Port, dict[str, str | None]] = {
+                port: {
+                    "effort": None,
+                    "flow": None,
+                }
+                for comp in self.components.values()
+                for port in comp.ports.values()
+                if port.bond is not None
+            }
+
+            # ------------------------------------------------------------------
+            # 2. Initialize component-side known variables.
+            #
+            # True  -> receives effort -> flow is component-side known
+            # False -> provides effort -> effort is component-side known
+            # ------------------------------------------------------------------
+           
+            for comp in self.components.values():
+                if comp.component_type in JUNCTIONS:
+                    continue
+                
+                for port in comp.ports.values():
+                    if port.bond is None:
+                        continue
+                    
+                    if port.causality is True:
+                        # Effort will be determined by the network.
+                        # Flow is supplied by the component.
+                        variable_expr[port]["flow"] = port.flow
+
+                    elif port.causality is False:
+                        # Flow will be determined by the network.
+                        # Effort is supplied by the component.
+                        variable_expr[port]["effort"] = port.effort
+
+                    else:
+                        raise RuntimeError(
+                            f"Port '{port.name}' has unassigned causality."
+                        )
+
+            # ------------------------------------------------------------------
+            # 3. Propagate junction variables.
+            #
+            # propagation_states[junction] contains the dependent junction
+            # port and its corresponding non-junction port, so the conservation
+            # equation can reuse the result rather than searching again.
+            # ------------------------------------------------------------------
+            propagation_states = self._propagate_junction_variables(
+                variable_expr
+            )
+
+            # ------------------------------------------------------------------
+            # 4. Generate network input equations for non-junction components.
+            #
+            # True  -> effort is network supplied
+            # False -> flow is network supplied
+            #
+            # If propagation did not determine the required variable, do NOT
+            # generate an invalid equation such as:
+            #
+            #     e_I_Mass.p1 - ()
+            #
+            # That variable will instead appear in a conservation equation.
+            # ------------------------------------------------------------------
+            equations: list[ConstitutiveEquation] = []
+
+            for comp in self.components.values():
+                if comp.component_type in JUNCTIONS:
+                    continue
+                
+                for port in comp.ports.values():
+                    if port.bond is None:
+                        continue
+                    
+                    if port.causality is True:
+                        # Port receives effort.
+                        # Therefore effort is supplied by the network.
+                        expression = variable_expr[port]["effort"]
+
+                        if expression is not None:
+                            equations.append(
+                                ConstitutiveEquation(
+                                    f"({port.effort}) = ({expression})",
+                                    f"Network effort equation for {port.name}",
+                                )
+                            )
+
+                    elif port.causality is False:
+                        # Port receives flow.
+                        # Therefore flow is supplied by the network.
+                        expression = variable_expr[port]["flow"]
+
+                        if expression is not None:
+                            equations.append(
+                                ConstitutiveEquation(
+                                    f"({port.flow}) = ({expression})",
+                                    f"Network flow equation for {port.name}",
+                                )
+                            )
+
+            # ------------------------------------------------------------------
+            # 5. Generate junction conservation equations.
+            # ------------------------------------------------------------------
+            for junction, propagation in propagation_states.items():
+            
+                if junction.component_type in (
+                    ComponentType.ZERO,
+                    ComponentType.XZERO,
+                ):
+                    equation = self._junction_conservation(
+                        junction=junction,
+                        rule=ZERO_RULE,
+                        state=propagation,
+                    )
+
+                elif junction.component_type in (
+                    ComponentType.ONE,
+                    ComponentType.XONE,
+                ):
+                    equation = self._junction_conservation(
+                        junction=junction,
+                        rule=ONE_RULE,
+                        state=propagation,
+                    )
+
+                else:
+                    continue
+                
+                if equation is not None:
+                    equations.append(equation)
+
+            return equations                         
     def draw(self, filename: str = "bond_graph", format: str = "png", view: bool = True) -> graphviz.Digraph:
         """
         Renders the Bond Graph from source --> target with formal causal strokes.
@@ -1192,3 +1876,6 @@ if __name__ == "__main__":
     bg.draw(filename="mass_spring_damper", format="png", view=True)
 
     print_causality_table(bg)
+    bg_equations = bg.generate_network_equations()
+    for eq in bg_equations:
+        print(eq)
