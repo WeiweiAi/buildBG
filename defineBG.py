@@ -60,8 +60,8 @@ class PortType(Enum):
     POWER_PORT = auto() # Port for power exchange (effort and flow)
     SIGNAL_PORT = auto() # Port for signal interface (control signals)
 class StorageType(Enum):
-    C_TYPE_PORT = auto() # Port for C-type storage (integrates flow to quantity), is a power port
-    I_TYPE_PORT = auto() # Port for I-type storage (integrates effort to momentum), is a power port
+    C_TYPE = auto() # Port for C-type storage (integrates flow to quantity), is a power port
+    I_TYPE = auto() # Port for I-type storage (integrates effort to momentum), is a power port
 class Domain(Enum):
     """Enumerates built-in physical domains and the abstract fallback domain."""
     ABSTRACT = auto()  # Default state: uses e, f, p, q
@@ -78,6 +78,7 @@ class Port:
     label: str # the ports of each component are uniquely labelled
     component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
     port_type: PortType = PortType.POWER_PORT
+    storage_type: StorageType | None = None # Only relevant for storage elements; otherwise None
     domain: Domain | str = Domain.ABSTRACT
     fixed_causality: bool | None = field(default=None, repr=False)# If set, this port's causality will not be changed during causality assignment.
     causality: bool | None = field(default=None, repr=False) # True if causal stroke is at this port (receiving effort), None if unassigned;
@@ -182,7 +183,81 @@ class Bond:
     def validate_connection(self) -> None:
         """Validates the bond's source and target ports."""
         Bond.validate(self.source, self.target, self.connection_type)
-    
+
+    def get_other_port(self, port: Port) -> Port:
+        """Returns the opposite port of the bond given one endpoint."""
+        if port is self.source:
+            return self.target
+        elif port is self.target:
+            return self.source
+        else:
+            raise ValueError(
+                f"Port '{port.name}' is not connected to this bond."
+            )
+    def get_other_component(self, component: Component) -> Component:
+        """Returns the opposite component of the bond given one endpoint."""
+        if component is self.source.component:
+            return self.target.component
+        elif component is self.target.component:
+            return self.source.component
+        else:
+            raise ValueError(
+                f"Component '{component.name}' is not connected to this bond."
+            )
+
+    def validate_causality(self) -> None:
+            source = self.source.causality
+            target = self.target.causality
+        
+            if source is None and target is None:
+                return
+        
+            if source is None or target is None:
+                raise ValueError(
+                    f"Bond '{self.name}' has partially assigned causality."
+                )
+        
+            if source == target:
+                raise ValueError(
+                    f"Bond '{self.name}' has conflicting causality: "
+                    "both endpoints have the same causality."
+                )
+    def has_causality_conflict(self) -> bool | None:
+        if self.source.causality is None or self.target.causality is None:
+            return None # Causality is unassigned for at least one port
+        return self.source.causality == self.target.causality
+
+    def assign_causality(self,port: Port, target_causality: bool) -> bool:
+        """Assigns causality to the bond's source and target ports, given a target causality for the specified port."""
+        if check := self.has_causality_conflict():
+            raise ValueError(
+                f"Cannot assign causality: source '{self.source.name}' and target '{self.target.name}' have conflicting causality assignments or unassigned ports."
+            )
+        other_port = self.get_other_port(port)
+
+        if port.causality is not None:
+            if port.causality != target_causality:
+                raise ValueError(f"Cannot assign causality: port '{port.name}' already has a conflicting causality assignment.")
+
+        if port.fixed_causality is not None:
+            if port.fixed_causality != target_causality:
+                raise ValueError(f"Cannot assign causality: port '{port.name}' has a fixed causality that conflicts with the target causality.")
+        other_causality = not target_causality
+
+        if other_port.causality is not None:
+            if other_port.causality != other_causality:
+                raise ValueError(f"Cannot assign causality: port '{other_port.name}' already has a conflicting causality assignment.")
+
+        if other_port.fixed_causality is not None:
+            if other_port.fixed_causality != other_causality:
+                raise ValueError(f"Cannot assign causality: port '{other_port.name}' has a fixed causality that conflicts with the target causality.")
+
+        # Commit only after all validation succeeds.
+        port.causality = target_causality
+        other_port.causality = other_causality
+
+        return True # Successfully assigned causality to the specified port; the other port's causality will be the opposite.
+        
     @staticmethod
     def validate(source: Port, target: Port, connection_type: ConnectionType = ConnectionType.POWER_BOND) -> None:
 
@@ -238,15 +313,19 @@ class Component:
         """Creates default ports based on the component type and requested count."""
         # 1-Port Elements
         if self.component_type in (ComponentType.R, ComponentType.SE, ComponentType.SF,ComponentType.C,ComponentType.I):
-            p1=self._add_port("p1")
+            storageType = StorageType.C_TYPE if self.component_type == ComponentType.C else StorageType.I_TYPE if self.component_type == ComponentType.I else None
+            p1=self._add_port("p1",storage_type=storageType)
             self._available_ports.append(p1) # For 1-port elements, the single port is always available for bonding
         # 2-Port Elements
         elif self.component_type in (ComponentType.TF, ComponentType.GY,ComponentType.IC):
-            p1=self._add_port("p1")
-            p2=self._add_port("p2")
+            storageType = StorageType.C_TYPE if self.component_type == ComponentType.IC else None
+            p1=self._add_port("p1",storage_type=storageType)
+            storageType = StorageType.I_TYPE if self.component_type == ComponentType.IC else None
+            p2=self._add_port("p2",storage_type=storageType)
             self._available_ports.extend([p1, p2])
         elif self.component_type in (ComponentType.MSE, ComponentType.MSF,ComponentType.MC, ComponentType.MI):
-            p1=self._add_port("p1")
+            storageType = StorageType.C_TYPE if self.component_type == ComponentType.MC else StorageType.I_TYPE if self.component_type == ComponentType.MI else None
+            p1=self._add_port("p1",storage_type=storageType)
             p2=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2])
         # Reaction Elements
@@ -545,6 +624,33 @@ class BondGraph:
             self.delete_bond(bond)
 
         del self.components[comp.name]
+
+    def set_fixed_causality(self, comp_arg: Component | str, port_label: str, causality_value: bool) -> None:
+        """Sets a fixed causality for a specific port on a component."""
+        comp_name = comp_arg.name if isinstance(comp_arg, Component) else comp_arg
+        comp = self.components.get(comp_name)
+        if not comp:
+            warnings.warn(f"Component '{comp_name}' not found in bond graph.")
+            return
+        try:
+            comp.set_fixed_causality(port_label, causality_value)
+        except KeyError as e:
+            warnings.warn(str(e))
+
+    def set_domain(self, arg: Component| Port| str, domain_value: Domain | str) -> None:
+        """Sets the domain for a specific component."""
+        if isinstance(arg, Component):
+            arg.domain = domain_value
+        elif isinstance(arg, Port):
+            arg.domain = domain_value
+        elif isinstance(arg, str):
+            resolved = self._resolve_string(arg)
+            if isinstance(resolved, Component) or isinstance(resolved, Port):
+                resolved.domain = domain_value
+            else:
+                warnings.warn(f"Could not resolve '{arg}' to a valid component or port for domain assignment.")
+        else:
+            warnings.warn(f"Invalid argument type: {type(arg)}. Expected Component, Port, or str.")
  
 def print_bond_table(bg: BondGraph) -> None:
     """Prints a terminal representation of bonds and causality."""
