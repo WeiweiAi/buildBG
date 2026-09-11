@@ -112,16 +112,17 @@ class Port:
     def effort(self) -> str | None:
         """Returns this port's effort-variable symbol, if assigned."""
         # Returns the stored symbol, or None if it hasn't been set yet.
-        return getattr(self, '_effort_symbol', None)
+        return getattr(self, '_effort_symbol', 'e_' + self.name)  # Default effort symbol if not set
 
     @effort.setter
     def effort(self, symbol: str) -> None:
         """Associates an effort-variable symbol with this port."""
-        self._effort_symbol = symbol        
+        self._effort_symbol = symbol
+
     @property
     def flow(self) -> str | None:
         """Returns this port's flow-variable symbol, if assigned."""
-        return getattr(self, '_flow_symbol', None)
+        return getattr(self, '_flow_symbol', 'f_' + self.name)  # Default flow symbol if not set
 
     @flow.setter
     def flow(self, symbol: str) -> None:
@@ -131,7 +132,7 @@ class Port:
     @property
     def quantity(self) -> str | None:
         """Returns this port's quantity-variable symbol, if assigned."""
-        return getattr(self, '_quantity_symbol', None)
+        return getattr(self, '_quantity_symbol', 'q_' + self.name)  # Default quantity symbol if not set
 
     @quantity.setter
     def quantity(self, symbol: str) -> None:
@@ -141,7 +142,7 @@ class Port:
     @property
     def momentum(self) -> str | None:
         """Returns this port's momentum-variable symbol, if assigned."""
-        return getattr(self, '_momentum_symbol', None)
+        return getattr(self, '_momentum_symbol', 'p_' + self.name)  # Default momentum symbol if not set
 
     @momentum.setter
     def momentum(self, symbol: str) -> None:
@@ -151,7 +152,7 @@ class Port:
     @property
     def signal(self) -> str | None:
         """Returns this port's signal-variable symbol, if assigned."""
-        return getattr(self, '_signal_symbol', None)
+        return getattr(self, '_signal_symbol', 's_' + self.name)  # Default signal symbol if not set
 
     @signal.setter
     def signal(self, symbol: str) -> None:
@@ -205,23 +206,28 @@ class Bond:
                 f"Component '{component.name}' is not connected to this bond."
             )
 
-    def validate_causality(self) -> None:
-            source = self.source.causality
-            target = self.target.causality
-        
-            if source is None and target is None:
-                return
-        
-            if source is None or target is None:
-                raise ValueError(
-                    f"Bond '{self.name}' has partially assigned causality."
-                )
-        
-            if source == target:
-                raise ValueError(
-                    f"Bond '{self.name}' has conflicting causality: "
-                    "both endpoints have the same causality."
-                )
+
+    def validate_causality(self) -> bool:
+        source = self.source.causality
+        target = self.target.causality
+    
+        if source is None and target is None:
+            raise ValueError(
+                f"Bond '{self.name}' has unassigned causality for both endpoints."
+            )
+    
+        if source is None or target is None:
+            raise ValueError(
+                f"Bond '{self.name}' has partially assigned causality."
+            )
+    
+        if source == target:
+            raise ValueError(
+                f"Bond '{self.name}' has conflicting causality: "
+                "both endpoints have the same causality."
+            )
+        return True
+    
     def has_causality_conflict(self) -> bool | None:
         if self.source.causality is None or self.target.causality is None:
             return None # Causality is unassigned for at least one port
@@ -740,7 +746,7 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
 
 import json
 
-def exportBG(bg: BondGraph) -> str:
+def exportBG(bg: BondGraph,json_file: str) -> None:
     """Serializes a BondGraph object and all state variables to a JSON string."""
     data = {
         "name": bg.name,
@@ -768,11 +774,11 @@ def exportBG(bg: BondGraph) -> str:
                 "domain": port.domain.name if hasattr(port.domain, 'name') else port.domain,
                 "fixed_causality": port.fixed_causality,
                 "causality": port.causality,
-                "effort": getattr(port, '_effort_symbol', None),
-                "flow": getattr(port, '_flow_symbol', None),
-                "quantity": getattr(port, '_quantity_symbol', None),
-                "momentum": getattr(port, '_momentum_symbol', None),
-                "signal": getattr(port, '_signal_symbol', None)
+                "effort": getattr(port, '_effort_symbol', 'e_' + port.name),
+                "flow": getattr(port, '_flow_symbol', 'f_' + port.name),
+                "quantity": getattr(port, '_quantity_symbol', 'q_' + port.name),
+                "momentum": getattr(port, '_momentum_symbol', 'p_' + port.name),
+                "signal": getattr(port, '_signal_symbol', 's_' + port.name)
             }
             c_data["ports"].append(p_data)
             
@@ -786,11 +792,13 @@ def exportBG(bg: BondGraph) -> str:
             "connection_type": bond.connection_type.name
         })
 
-    return json.dumps(data, indent=4)
+    with open(json_file, "w") as f:
+        json.dump(data, f, indent=4)
 
-def importBG(json_str: str) -> BondGraph:
-    """Reconstructs a BondGraph object from a JSON string."""
-    data = json.loads(json_str)
+def importBG(json_file: str) -> BondGraph:
+    """Reconstructs a BondGraph object from a JSON file."""
+    with open(json_file, "r") as f:
+        data = json.load(f)
     bg = BondGraph(name=data.get("name", "Imported_BG"))
 
     # 1. Reconstruct Components and Ports
@@ -877,14 +885,7 @@ if __name__ == "__main__":
     print_bond_table(bg)
 
     # 1. Export unassigned or partially assigned graph
-    json_payload = exportBG(bg)
-    with open("mass_spring_damper.json", "w") as f:
-        f.write(json_payload)
-
-    # 2. Reconstruct graph identically in a new session
-    with open("mass_spring_damper.json", "r") as f:
-        loaded_json = f.read()
-
-    restored_bg = importBG(loaded_json)
+    exportBG(bg, "mass_spring_damper.json")
+    restored_bg = importBG("mass_spring_damper.json")
     drawBG(bg=restored_bg, filename="restored_mass_spring_damper", format="png", view=True)
     print_bond_table(restored_bg)

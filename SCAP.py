@@ -1,15 +1,12 @@
 from enum import Enum, auto
-from defineBG import ( ComponentType,  Component, Bond, BondGraph, StorageType)
+from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, exportBG,importBG,drawBG
 from collections import deque
-
-
 class SystemType(Enum):
     """Classifies a graph's resulting ordinary or differential-algebraic system."""
     ODE = auto()
     DAE_DERIVATIVE = auto()
     DAE_ALGEBRAIC = auto()
     DAE_MIXED = auto()
-
 class SCAPEngine:
     """Sequential Causality Assignment Procedure."""
     def __init__(self, graph: BondGraph):
@@ -271,21 +268,11 @@ class SCAPEngine:
         return self.system_type
 
 if __name__ == "__main__":
-    # Example usage
-    bg = BondGraph("Mass_Spring_Damper")
-    # Add components
-    se = bg.add_component("SE_Force", component_type=ComponentType.SE)
-    j1 = bg.add_component("J1", component_type=ComponentType.ONE)
-    mass = bg.add_component("I_Mass", component_type=ComponentType.I)
-    spring = bg.add_component("C_Spring", component_type=ComponentType.C)
-    damper = bg.add_component("R_Damper", component_type=ComponentType.R)
-    # Connect components via bonds
-    bg.add_bond(se, j1)
-    bg.add_bond(j1, mass)
-    bg.add_bond(j1, spring)
-    bg.add_bond(j1, damper)
+    bg = importBG('mass_spring_damper.json')  # Load a BondGraph from a JSON file
     # Add components and bonds to the bond graph as needed
     scap_engine = SCAPEngine(bg)
     system_type = scap_engine.run()
-    print(f"System type: {system_type.name}")                     
+    exportBG(bg, 'mass_spring_damper_causality.json')  # Export the BondGraph to a JSON file
+    print(f"System type: {system_type.name}")  
+    drawBG(bg=bg, filename="mass_spring_damper_causality", format="png", view=True)  # Visualize the BondGraph                   
     
