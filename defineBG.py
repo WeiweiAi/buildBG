@@ -450,11 +450,7 @@ class BondGraph:
         # Insertion-ordered mapping gives O(1) bond membership/deletion
         # while retaining deterministic iteration order.
         self._bonds: dict[Bond, None] = {}
-        # Extended Diagnostic State
-        self.derivative_causality_components: list[Component] = []
-        self.algebraic_loops: list[list[Bond]] = []
-  
-    
+     
     @property
     def bonds(self):
         """Insertion-ordered, set-like view of all bonds."""
@@ -742,6 +738,126 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
         dot.render(filename=filename, format=format, cleanup=True, view=view)
         return dot
 
+import json
+
+def exportBG(bg: BondGraph) -> str:
+    """Serializes a BondGraph object and all state variables to a JSON string."""
+    data = {
+        "name": bg.name,
+        "components": [],
+        "bonds": []
+    }
+    
+    # 1. Export Components and Ports
+    for comp in bg.components.values():
+        c_data = {
+            "name": comp.name,
+            "component_type": comp.component_type.name if hasattr(comp.component_type, 'name') else comp.component_type,
+            "domain": comp.domain.name if hasattr(comp.domain, 'name') else comp.domain,
+            "non_invertible": comp.non_invertible,
+            "num_power_ports": comp.num_power_ports,
+            "num_signal_ports": comp.num_signal_ports,
+            "ports": []
+        }
+        
+        for port_label, port in comp.ports.items():
+            p_data = {
+                "label": port_label,
+                "port_type": port.port_type.name,
+                "storage_type": port.storage_type.name if port.storage_type else None,
+                "domain": port.domain.name if hasattr(port.domain, 'name') else port.domain,
+                "fixed_causality": port.fixed_causality,
+                "causality": port.causality,
+                "effort": getattr(port, '_effort_symbol', None),
+                "flow": getattr(port, '_flow_symbol', None),
+                "quantity": getattr(port, '_quantity_symbol', None),
+                "momentum": getattr(port, '_momentum_symbol', None),
+                "signal": getattr(port, '_signal_symbol', None)
+            }
+            c_data["ports"].append(p_data)
+            
+        data["components"].append(c_data)
+
+    # 2. Export Bonds
+    for bond in bg.bonds:
+        data["bonds"].append({
+            "source": bond.source.name,  # Uses Port.name (Component.label)[cite: 2]
+            "target": bond.target.name,  # Uses Port.name (Component.label)[cite: 2]
+            "connection_type": bond.connection_type.name
+        })
+
+    return json.dumps(data, indent=4)
+
+def importBG(json_str: str) -> BondGraph:
+    """Reconstructs a BondGraph object from a JSON string."""
+    data = json.loads(json_str)
+    bg = BondGraph(name=data.get("name", "Imported_BG"))
+
+    # 1. Reconstruct Components and Ports
+    for c_data in data.get("components", []):
+        c_type_val = c_data["component_type"]
+        domain_val = c_data["domain"]
+        
+        c_type = getattr(ComponentType, c_type_val, c_type_val)
+        domain = getattr(Domain, domain_val, domain_val)
+        
+        comp = bg.add_component(
+            c_data["name"], 
+            component_type=c_type, 
+            domain=domain,
+            num_power_ports=c_data.get("num_power_ports", 1),
+            num_signal_ports=c_data.get("num_signal_ports", 0)
+        )
+        comp.non_invertible = c_data.get("non_invertible", False)
+        
+        # Restore precise port states (crucial for junctions which do not auto-generate ports[cite: 2])
+        for p_data in c_data.get("ports", []):
+            label = p_data["label"]
+            
+            # If __post_init__ didn't create the port (e.g., Junctions), create it now
+            if label not in comp.ports:
+                p_type = getattr(PortType, p_data.get("port_type", "POWER_PORT"))
+                s_type = getattr(StorageType, p_data.get("storage_type")) if p_data.get("storage_type") else None
+                p_domain = getattr(Domain, p_data.get("domain")) if p_data.get("domain") in Domain.__members__ else p_data.get("domain", Domain.ABSTRACT)
+                
+                comp._add_port(label, port_type=p_type, storage_type=s_type, domain=p_domain)
+            # Keep the _next_port_number updated for junctions
+            if label.startswith("p"):
+                try:
+                    port_num = int(label[1:])
+                    if port_num >= comp._next_port_number:
+                        comp._next_port_number = port_num + 1
+                except ValueError:
+                    pass                   
+            # Apply state variables
+            port = comp.ports[label]
+            port.fixed_causality = p_data.get("fixed_causality")
+            port.causality = p_data.get("causality")
+            
+            # Apply variable symbols if they exist
+            if p_data.get("effort"): port.effort = p_data["effort"]
+            if p_data.get("flow"): port.flow = p_data["flow"]
+            if p_data.get("quantity"): port.quantity = p_data["quantity"]
+            if p_data.get("momentum"): port.momentum = p_data["momentum"]
+            if p_data.get("signal"): port.signal = p_data["signal"]
+            
+            # Re-register port availability[cite: 2]
+            if not port.bond and port not in comp._available_ports:
+                comp._available_ports.append(port)
+
+    # 2. Reconstruct Bonds
+    for b_data in data.get("bonds", []):
+        conn_type = getattr(ConnectionType, b_data.get("connection_type", "POWER_BOND"))
+        
+        # Uses _resolve_string natively to map "Component.label" to the correct port[cite: 2]
+        bg.add_bond(
+            source=b_data["source"],
+            target=b_data["target"],
+            connection_type=conn_type
+        )
+
+    return bg
+
 if __name__ == "__main__": 
     # Construct the system: Mass (I), Spring (C), Damper (R), Force Source (SE)
     bg = BondGraph("Mass_Spring_Damper")
@@ -759,3 +875,16 @@ if __name__ == "__main__":
     # Run SCAP to assign causality across all bonds
     drawBG(bg=bg, filename="mass_spring_damper", format="png", view=True)
     print_bond_table(bg)
+
+    # 1. Export unassigned or partially assigned graph
+    json_payload = exportBG(bg)
+    with open("mass_spring_damper.json", "w") as f:
+        f.write(json_payload)
+
+    # 2. Reconstruct graph identically in a new session
+    with open("mass_spring_damper.json", "r") as f:
+        loaded_json = f.read()
+
+    restored_bg = importBG(loaded_json)
+    drawBG(bg=restored_bg, filename="restored_mass_spring_damper", format="png", view=True)
+    print_bond_table(restored_bg)
