@@ -42,15 +42,7 @@ class ComponentType(Enum):
 
 JUNCTIONS = {ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO,  ComponentType.XONE }
 TRANSDUCERS = {ComponentType.TF, ComponentType.GY, ComponentType.MTF, ComponentType.MGY }
-class BGVariable(Enum):
-    """Identifies the effort, flow, state, and signal variables of a domain."""
-    EFFORT = auto() # e.g., voltage, force, pressure
-    FLOW = auto()   # e.g., current, velocity, volumetric flow rate
-    QUANTITY = auto() # e.g., charge, displacement, volume
-    MOMENTUM = auto() # e.g., momentum, angular momentum
-    POWER = auto() # e.g., power, energy rate
-    ENERGY = auto() # e.g., energy, work
-    SIGNAL = auto() # A signal represents one arbitrary variable of time that may also be an effort or a flow, but not necessarily
+
 class ConnectionType(Enum):
     """Distinguishes energy-carrying bonds from one-way signal bonds."""
     POWER_BOND = auto() # carries both effort and flow (bidirectional)
@@ -72,6 +64,31 @@ class Domain(Enum):
     CHEMICAL = auto()
     THERMAL = auto()
     CUSTOM = auto()
+
+@dataclass(frozen=True)
+class PhysicalQuantity:
+    """Metadata for a domain-specific power variable."""
+    description: str
+    symbol: str
+    units: str
+
+class BGVariable(Enum):
+    """Identifies the effort, flow, state, and signal variables of a domain."""
+    EFFORT = auto() # e.g., voltage, force, pressure
+    FLOW = auto()   # e.g., current, velocity, volumetric flow rate
+    QUANTITY = auto() # e.g., charge, displacement, volume
+    MOMENTUM = auto() # e.g., momentum, angular momentum
+    POWER = auto() # e.g., power, energy rate
+    ENERGY = auto() # e.g., energy, work
+    SIGNAL = auto() # A signal represents one arbitrary variable of time that may also be an effort or a flow, but not necessarily
+
+@dataclass
+class BGPhyQuantity:
+    """Metadata for a bond graph variable."""
+    id: str
+    type: BGVariable = BGVariable.EFFORT
+    physical_quantity: PhysicalQuantity | None = None
+
 @dataclass(eq=False)
 class Port:
     """Represents one typed connection point on a component."""
@@ -109,56 +126,55 @@ class Port:
         self.component.release_port(self) # Mark the port as free when a bond is detached        
 
     @property
-    def effort(self) -> str | None:
-        """Returns this port's effort-variable symbol, if assigned."""
+    def effort(self) -> BGPhyQuantity:
+        """Returns this port's effort description, if assigned."""
         # Returns the stored symbol, or None if it hasn't been set yet.
-        return getattr(self, '_effort_symbol', 'e_' + self.name)  # Default effort symbol if not set
+        return BGPhyQuantity(f'e_{self.name}',BGVariable.EFFORT, getattr(self, '_effort', None))  
 
     @effort.setter
-    def effort(self, symbol: str) -> None:
-        """Associates an effort-variable symbol with this port."""
-        self._effort_symbol = symbol
+    def effort(self, physical: PhysicalQuantity) -> None:
+        """Sets this port's effort description."""
+        self._effort = physical
 
     @property
-    def flow(self) -> str | None:
-        """Returns this port's flow-variable symbol, if assigned."""
-        return getattr(self, '_flow_symbol', 'f_' + self.name)  # Default flow symbol if not set
+    def flow(self) -> BGPhyQuantity:
+        """Returns this port's flow description, if assigned."""
+        return BGPhyQuantity(f'f_{self.name}',BGVariable.FLOW, getattr(self, '_flow', None))  
 
     @flow.setter
-    def flow(self, symbol: str) -> None:
-        """Associates a flow-variable symbol with this port."""
-        self._flow_symbol = symbol
+    def flow(self, physical: PhysicalQuantity) -> None:
+        """Sets this port's flow description."""
+        self._flow = physical
 
     @property
-    def quantity(self) -> str | None:
-        """Returns this port's quantity-variable symbol, if assigned."""
-        return getattr(self, '_quantity_symbol', 'q_' + self.name)  # Default quantity symbol if not set
+    def quantity(self) -> BGPhyQuantity:
+        """Returns this port's quantity description, if assigned."""
+        return BGPhyQuantity(f'q_{self.name}',BGVariable.QUANTITY, getattr(self, '_quantity', None))  
 
     @quantity.setter
-    def quantity(self, symbol: str) -> None:
-        """Associates a quantity-variable symbol with this port."""
-        self._quantity_symbol = symbol
-
+    def quantity(self, physical: PhysicalQuantity) -> None:
+        """Sets this port's quantity description."""
+        self._quantity = physical
+    
     @property
-    def momentum(self) -> str | None:
-        """Returns this port's momentum-variable symbol, if assigned."""
-        return getattr(self, '_momentum_symbol', 'p_' + self.name)  # Default momentum symbol if not set
-
+    def momentum(self) -> BGPhyQuantity:
+        """Returns this port's momentum description, if assigned."""
+        return BGPhyQuantity(f"p_{self.name}", BGVariable.MOMENTUM, getattr(self, '_momentum', None))  
+    
     @momentum.setter
-    def momentum(self, symbol: str) -> None:
-        """Associates a momentum-variable symbol with this port."""
-        self._momentum_symbol = symbol
+    def momentum(self, physical: PhysicalQuantity) -> None:
+        """Sets this port's momentum description."""
+        self._momentum = physical
 
     @property
-    def signal(self) -> str | None:
-        """Returns this port's signal-variable symbol, if assigned."""
-        return getattr(self, '_signal_symbol', 's_' + self.name)  # Default signal symbol if not set
-
+    def signal(self) -> BGPhyQuantity:
+        """Returns this port's signal description, if assigned."""
+        return BGPhyQuantity(f"s_{self.name}", BGVariable.SIGNAL, getattr(self, '_signal', None))  
+    
     @signal.setter
-    def signal(self, symbol: str) -> None:
-        """Associates a signal-variable symbol with this port."""
-        self._signal_symbol = symbol
-
+    def signal(self, physical: PhysicalQuantity) -> None:
+        """Sets this port's signal description."""
+        self._signal = physical
 @dataclass(eq=False)
 class Bond:
     """Connects two ports and owns their shared causality assignment."""
@@ -313,7 +329,7 @@ class Component:
     _available_ports: deque[Port] = field(default_factory=deque, repr=False,   init=False) # track which ports are available for new bonds  
     _next_port_number: int = field(default=1, repr=False, init=False) # only used for junctions, to auto-label new ports
     bonds: set[Bond] = field(default_factory=set, repr=False, init=False) # register all bonds connected to this component, for quick lookup and deletion 
-    
+    constitutive_equations: list[str] = field(default_factory=list, repr=False, init=False) # store any constitutive equations for this component
         
     def __post_init__(self) -> None:
         """Creates default ports based on the component type and requested count."""
@@ -758,28 +774,36 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
     for comp in bg.components.values():
         c_data = {
             "name": comp.name,
-            "component_type": comp.component_type.name if hasattr(comp.component_type, 'name') else comp.component_type,
-            "domain": comp.domain.name if hasattr(comp.domain, 'name') else comp.domain,
+            "component_type": comp.component_type.name if isinstance(comp.component_type, ComponentType) else comp.component_type,
+            "domain": comp.domain.name if isinstance(comp.domain, Domain) else comp.domain,
             "non_invertible": comp.non_invertible,
             "num_power_ports": comp.num_power_ports,
             "num_signal_ports": comp.num_signal_ports,
             "ports": []
         }
-        
+        if len(comp.constitutive_equations) > 0:
+            c_data["constitutive_equations"] = comp.constitutive_equations
+
         for port_label, port in comp.ports.items():
             p_data = {
                 "label": port_label,
                 "port_type": port.port_type.name,
                 "storage_type": port.storage_type.name if port.storage_type else None,
-                "domain": port.domain.name if hasattr(port.domain, 'name') else port.domain,
+                "domain": port.domain.name if isinstance(port.domain, Domain) else port.domain,
                 "fixed_causality": port.fixed_causality,
-                "causality": port.causality,
-                "effort": getattr(port, '_effort_symbol', 'e_' + port.name),
-                "flow": getattr(port, '_flow_symbol', 'f_' + port.name),
-                "quantity": getattr(port, '_quantity_symbol', 'q_' + port.name),
-                "momentum": getattr(port, '_momentum_symbol', 'p_' + port.name),
-                "signal": getattr(port, '_signal_symbol', 's_' + port.name)
-            }
+                "causality": port.causality
+                }
+            if port.effort.physical_quantity is not None:
+                p_data["effort"]["physical_quantity"] = port.effort.physical_quantity
+            if port.flow.physical_quantity is not None:
+                p_data["flow"]["physical_quantity"] = port.flow.physical_quantity
+            if port.quantity.physical_quantity is not None:
+                p_data["quantity"]["physical_quantity"] = port.quantity.physical_quantity
+            if port.momentum.physical_quantity is not None:
+                p_data["momentum"]["physical_quantity"] = port.momentum.physical_quantity
+            if port.signal.physical_quantity is not None:
+                p_data["signal"]["physical_quantity"] = port.signal.physical_quantity
+
             c_data["ports"].append(p_data)
             
         data["components"].append(c_data)
@@ -817,6 +841,8 @@ def importBG(json_file: str) -> BondGraph:
             num_signal_ports=c_data.get("num_signal_ports", 0)
         )
         comp.non_invertible = c_data.get("non_invertible", False)
+        if "constitutive_equations" in c_data:
+            comp.constitutive_equations = c_data["constitutive_equations"]
         
         # Restore precise port states (crucial for junctions which do not auto-generate ports[cite: 2])
         for p_data in c_data.get("ports", []):
@@ -841,13 +867,14 @@ def importBG(json_file: str) -> BondGraph:
             port = comp.ports[label]
             port.fixed_causality = p_data.get("fixed_causality")
             port.causality = p_data.get("causality")
-            
-            # Apply variable symbols if they exist
-            if p_data.get("effort"): port.effort = p_data["effort"]
-            if p_data.get("flow"): port.flow = p_data["flow"]
-            if p_data.get("quantity"): port.quantity = p_data["quantity"]
-            if p_data.get("momentum"): port.momentum = p_data["momentum"]
-            if p_data.get("signal"): port.signal = p_data["signal"]
+
+            # Get the physical quantities for each BGVariable type
+            for var_type in ["effort", "flow", "quantity", "momentum", "signal"]:
+                var_data = p_data.get(var_type)
+                if var_data:
+                    physical_quantity = var_data.get("physical_quantity")
+                    if physical_quantity is not None:
+                        setattr(getattr(port, var_type), "physical_quantity", physical_quantity)
             
             # Re-register port availability[cite: 2]
             if not port.bond and port not in comp._available_ports:

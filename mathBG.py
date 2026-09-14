@@ -1,130 +1,18 @@
-
-from enum import Enum, auto
-from dataclasses import dataclass, field
-from typing import Any
-from defineBG import JUNCTIONS, BGVariable, Domain, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG
-
-class ConstitutiveRelationship(Enum):
-    """Lists supported implicit constitutive-equation forms."""
-    PHI_C=auto() # q - PHI_C(e) = 0
-    PHI_I=auto() # p - PHI_I(f) = 0
-    PHI_IC=auto() # q - PHI_IC(e) = 0, p - PHI_IC(f) = 0
-    PHI_R=auto() # e - PHI_R(f) = 0
-    PHI_MC=auto() # q - PHI_MC(e) = 0
-    PHI_MI=auto() # p - PHI_MI(f) = 0
-    PHI_MIC=auto() # q - PHI_MIC(e) = 0, p - PHI_MIC(f) = 0
-    PHI_MR=auto() # e - PHI_MR(f) = 0
-    PHI_TF=auto() # e1 - PHI_TF(e2) = 0, f2 - PHI_TF(f1) = 0
-    PHI_GY=auto() # e1 - PHI_GY(f2) = 0, e2 - PHI_GY(f1) = 0
-    PHI_MTF=auto() # e1 - PHI_MTF(e2) = 0, f2 - PHI_MTF(f1) = 0
-    PHI_MGY=auto() # e1 - PHI_MGY(f2) = 0, e2 - PHI_MGY(f1) = 0
-    PHI_SE=auto() # e - PHI_SE(t) = 0
-    PHI_SF=auto() # f - PHI_SF(t) = 0
-    PHI_MSE=auto() # e - PHI_MSE(t) = 0
-    PHI_MSF=auto() # f - PHI_MSF(t) = 0
-    PHI_USER=auto() # User-defined constitutive relationship
-
-@dataclass
-class PhysicalQuantity:
-    """Metadata for a domain-specific power variable."""
-    description: str
-    symbol: str
-    units: str
-
-class DomainRegistry:
-    """Central registry for domain-specific physical quantities."""
-
-    _registry: dict[Domain | str, dict[BGVariable | str, PhysicalQuantity]] = {
-        Domain.ABSTRACT: {
-            BGVariable.EFFORT: PhysicalQuantity("generalized effort", "e", "effort_units"),
-            BGVariable.FLOW: PhysicalQuantity("generalized flow", "f", "flow_units"),
-            BGVariable.QUANTITY: PhysicalQuantity("generalized extensive quantity", "q", "extensive_quantity_units"),
-            BGVariable.MOMENTUM: PhysicalQuantity("generalized momentum", "p", "momentum_units"),
-        },
-        Domain.ELECTRICAL: {
-            BGVariable.EFFORT: PhysicalQuantity("voltage", "u", "volt"),
-            BGVariable.FLOW: PhysicalQuantity("current", "i", "fA"),
-            BGVariable.QUANTITY: PhysicalQuantity("charge", "q", "fC"),
-            BGVariable.MOMENTUM: PhysicalQuantity("magnetic flux linkage", "p", "volt_s"),
-        },
-        Domain.MECHANICAL_TRANSLATIONAL: {
-            BGVariable.EFFORT: PhysicalQuantity("force", "F", "J_per_um"),
-            BGVariable.FLOW: PhysicalQuantity("velocity", "v", "um_per_s"),
-            BGVariable.QUANTITY: PhysicalQuantity("displacement", "x", "um"),
-            BGVariable.MOMENTUM: PhysicalQuantity("momentum", "p", "J_s_per_um"),
-        },
-        Domain.MECHANICAL_ROTATIONAL: {
-            BGVariable.EFFORT: PhysicalQuantity("torque", "T", "J_per_rad"),
-            BGVariable.FLOW: PhysicalQuantity("angular velocity", "w", "rad_per_s"),
-            BGVariable.QUANTITY: PhysicalQuantity("angular displacement", "theta", "rad"),
-            BGVariable.MOMENTUM: PhysicalQuantity("angular momentum", "p", "J_s_per_rad"),
-        },
-        Domain.HYDRAULIC: {
-            BGVariable.EFFORT: PhysicalQuantity("pressure", "P", "mmHg"),
-            BGVariable.FLOW: PhysicalQuantity("volume flow", "Q", "mL_per_s"),
-            BGVariable.QUANTITY: PhysicalQuantity("volume", "V", "mL"),
-            BGVariable.MOMENTUM: PhysicalQuantity("momentum of a flow tube", "p", "mmHg_mL2_per_s3"),
-        },
-        Domain.CHEMICAL: {
-            BGVariable.EFFORT: PhysicalQuantity("chemical potential", "mu", "J_per_mol"),
-            BGVariable.FLOW: PhysicalQuantity("molar flow", "v", "fmol_per_s"),
-            BGVariable.QUANTITY: PhysicalQuantity("molar amount", "q", "fmol")
-        }
-    }
-
-    @classmethod
-    def register(cls, domain: Domain | str, variables: dict[BGVariable | str, PhysicalQuantity]) -> None:
-        """Registers a new domain."""
-        if domain in cls._registry:
-            raise ValueError(
-                f"Domain '{domain}' is already registered."
-            )  
-        else:
-            cls._registry[domain] = variables
-    @classmethod
-    def replace(cls, domain: Domain | str, variables: dict[BGVariable | str, PhysicalQuantity]) -> None:
-        """Overwrites an existing domain."""
-        cls._registry[domain] = variables
-
-    @classmethod
-    def get_variables(cls, domain: 'Domain | str') -> dict[BGVariable | str, PhysicalQuantity] | None:
-        """Returns registered variable metadata for a domain, if present."""
-        return cls._registry.get(domain)
-
-@dataclass
-class StateVariable:
-    """Represents a time-integrated energy state of a component (q or p)."""
-    variable_type: BGVariable | str
-    component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
-    
-    @property
-    def symbol(self) -> str:
-        """Returns the domain-specific state symbol qualified by component name."""
-        # Query the new registry
-        domain_dict = DomainRegistry.get_variables(self.component.domain)
-        if domain_dict and self.variable_type in domain_dict:
-            base_symbol = domain_dict[self.variable_type].symbol
-            return f"{base_symbol}_{self.component.name}"
-        else:
-            raise ValueError(f"Domain '{self.component.domain}' does not have a registered symbol for variable type '{self.variable_type}'.")
-    @property
-    def derivative_symbol(self) -> str:
-        """Returns the time derivative of the state variable (x_dot)."""
-        return f"d({self.symbol})/dt"
+from dataclasses import dataclass
+from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG
 @dataclass
 class Equation:
-    """Represents a single implicit relation: Phi(e, f, x, x_dot) = 0"""
-    expression: Any  # Could be a string for now, or a sympy.Expr in a real solver
+    """Represents a single equation: y = f(x) with a description."""
+    port_name: str = ""
+    variable: BGVariable = BGVariable.EFFORT
+    expression: str = ""  # Could be a string for now, or a sympy.Expr in a real solver
     description: str = ""
-
- 
 @dataclass(frozen=True)
 class JunctionPropagation:
     determining_junction_port: Port # The port on the junction determining the effort (zero junction) or flow (one junction) values.
     determining_component_port: Port # The port of a component connected to determining_junction_port
     propagated_expression: str
     changed: bool
-
 @dataclass(frozen=True)
 class JunctionRule:
     propagated_variable: str
@@ -181,11 +69,11 @@ class EquationBuilder:
 
                 if port.causality is True:
                     # Component receives effort and provides flow.
-                    variable_expr[port]["flow"] = port.flow
+                    variable_expr[port]["flow"] = port.flow.id
 
                 elif port.causality is False:
                     # Component receives flow and provides effort.
-                    variable_expr[port]["effort"] = port.effort
+                    variable_expr[port]["effort"] = port.effort.id
 
                 else:
                     raise RuntimeError(
@@ -311,8 +199,9 @@ class EquationBuilder:
                     if expr is None:
                        continue
                     equations.append(
-                        Equation(
-                            f"{port.effort} = ({expr})",
+                        Equation(f"{port.name}",
+                                 BGVariable.EFFORT,
+                            f"{port.effort.id} = {expr}",
                             f"Network effort equation for {port.name}",
                         )
                     )
@@ -322,7 +211,9 @@ class EquationBuilder:
                         continue
                     equations.append(
                         Equation(
-                            f"{port.flow} = ({expr})",
+                            f"{port.name}",
+                            BGVariable.FLOW,
+                            f"{port.flow.id} = {expr}",
                             f"Network flow equation for {port.name}",
                         )
                     )
@@ -366,7 +257,7 @@ class EquationBuilder:
                         f"junction '{junction.name}'."
                     )
 
-                expression = getattr( other_port, rule.conserved_variable)
+                expression = getattr(getattr( other_port, rule.conserved_variable), "id")
 
                 terms.append(
                     (
@@ -431,7 +322,7 @@ class EquationBuilder:
                     prefix = " + " if rhs_sign > 0 else " - "
 
                 rhs_terms.append(
-                    f"{prefix}({expression})"
+                    f"{prefix}{expression}"
                 )
 
             rhs = "".join(rhs_terms)
@@ -439,11 +330,12 @@ class EquationBuilder:
             if not rhs:
                 rhs = "0"
 
-            return Equation(
-                f"({dependent_expression}) = {rhs}",
-                f"{junction.component_type.name}-junction "
-                f"'{junction.name}': "
-                f"{rule.conserved_variable} conservation",
+            junction_type_name = junction.component_type.name if isinstance(junction.component_type, ComponentType) else str(junction.component_type)
+            return Equation(f"{dependent_port.name}",
+                            BGVariable[rule.conserved_variable.upper()],
+                f"{dependent_expression} = {rhs}",
+                f"{junction_type_name} "
+                f"{rule.conserved_variable} conservation of {junction.name}",
             )
     def _generate_junction_equations(
             self,
@@ -552,4 +444,4 @@ if __name__ == "__main__":
     builder = EquationBuilder(bg)
     equations = builder.generate_network_equations()
     for eq in equations:
-        print(eq.expression, ":", eq.description)
+        print("port_name:", eq.port_name, "variable:", eq.variable, "\n", "expression:", eq.expression, "\n","description:", eq.description)
