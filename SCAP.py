@@ -57,7 +57,7 @@ class SCAPEngine:
         changed_bonds: list[Bond] = []
 
         # 0-Junction & Switched 0-Junction (1 Effort IN constraint)
-        if comp.component_type in (ComponentType.ZERO, ComponentType.XZERO):
+        if comp.type in (ComponentType.ZERO, ComponentType.XZERO):
             effort_in = sum(1 for b in assigned_bonds if self._get_bond_effort_direction(b, comp) == "IN")       
             if effort_in > 1:
                 raise ValueError(f"Causality Conflict: 0-Junction '{comp.name}' has {effort_in} effort inputs (max 1).")
@@ -71,7 +71,7 @@ class SCAPEngine:
                 changed_bonds.append(b)
 
         # 1-Junction & Switched 1-Junction (1 Effort OUT constraint)
-        elif comp.component_type in (ComponentType.ONE, ComponentType.XONE):
+        elif comp.type in (ComponentType.ONE, ComponentType.XONE):
             effort_out = sum(1 for b in assigned_bonds if self._get_bond_effort_direction(b, comp) == "OUT")
 
             if effort_out > 1:
@@ -87,7 +87,7 @@ class SCAPEngine:
                 changed_bonds.append(b)
 
         # Transformers (TF, MTF)
-        elif comp.component_type in (ComponentType.TF, ComponentType.MTF) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
+        elif comp.type in (ComponentType.TF, ComponentType.MTF) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
             assigned_dir = self._get_bond_effort_direction(assigned_bonds[0], comp)
             b = unassigned_bonds[0]
             if assigned_dir is None:
@@ -100,7 +100,7 @@ class SCAPEngine:
             changed_bonds.append(b)
 
         # Gyrators (GY, MGY)
-        elif comp.component_type in (ComponentType.GY, ComponentType.MGY) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
+        elif comp.type in (ComponentType.GY, ComponentType.MGY) and len(unassigned_bonds) == 1 and len(assigned_bonds) == 1:
             assigned_dir = self._get_bond_effort_direction(assigned_bonds[0], comp)
             b = unassigned_bonds[0]
             if assigned_dir is None:
@@ -178,10 +178,10 @@ class SCAPEngine:
         # =====================================================================
         step123_neighbors: list[Component] = []
         for comp in self.graph.components.values():
-            if comp.component_type in (ComponentType.SE, ComponentType.MSE, ComponentType.SF, ComponentType.MSF):
+            if comp.type in (ComponentType.SE, ComponentType.MSE, ComponentType.SF, ComponentType.MSF):
                 for port in comp.ports.values():
                     if port.bond: # active bond
-                        is_effort_source = comp.component_type in (ComponentType.SE, ComponentType.MSE)
+                        is_effort_source = comp.type in (ComponentType.SE, ComponentType.MSE)
                         if is_effort_source:
                             target_causality = False # provides effort and receives flow
                         else:
@@ -209,15 +209,15 @@ class SCAPEngine:
         # =====================================================================
         storage_types = (ComponentType.C, ComponentType.MC, ComponentType.I, ComponentType.MI, ComponentType.IC, ComponentType.MIC)
         for comp in self.graph.components.values():
-            if comp.component_type in storage_types:
+            if comp.type in storage_types:
                 for port in comp.ports.values():
                     if port.bond:
                         # Determine if this specific port acts as C or I
                         # For mixed IC/MIC, check port-level definitions; fallback to component level
                         pref_causality = None
-                        if port.storage_type == StorageType.C_TYPE:
+                        if port.storage == StorageType.C_TYPE:
                             pref_causality = False
-                        elif port.storage_type == StorageType.I_TYPE:
+                        elif port.storage == StorageType.I_TYPE:
                             pref_causality = True
                         if pref_causality is None:
                             continue # Skip if no preferred causality can be determined for this port
@@ -238,7 +238,7 @@ class SCAPEngine:
         # STEP 4: Arbitrary / Free Causality & Algebraic Loop Inventory
         # =====================================================================
         for comp in self.graph.components.values():
-            if comp.component_type in (ComponentType.R, ComponentType.MR):
+            if comp.type in (ComponentType.R, ComponentType.MR):
                 for port in comp.ports.values():
                     if port.bond :
                         # Assign arbitrary effort out

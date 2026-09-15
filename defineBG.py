@@ -62,6 +62,7 @@ class Domain(Enum):
     MECHANICAL_ROTATIONAL = auto()
     HYDRAULIC = auto()
     CHEMICAL = auto()
+    ELECTROCHEMICAL = auto()
     THERMAL = auto()
     CUSTOM = auto()
 
@@ -71,6 +72,7 @@ class PhysicalQuantity:
     description: str
     symbol: str
     units: str
+    value: float | None = None  # Optional numerical value for the physical quantity
 
 class BGVariable(Enum):
     """Identifies the effort, flow, state, and signal variables of a domain."""
@@ -81,8 +83,8 @@ class BGVariable(Enum):
     POWER = auto() # e.g., power, energy rate
     ENERGY = auto() # e.g., energy, work
     SIGNAL = auto() # A signal represents one arbitrary variable of time that may also be an effort or a flow, but not necessarily
-
-@dataclass
+    CONSTANT = auto() # physical constants or parameters.
+@dataclass(eq=False)
 class BGPhyQuantity:
     """Metadata for a bond graph variable."""
     id: str
@@ -94,8 +96,8 @@ class Port:
     """Represents one typed connection point on a component."""
     label: str # the ports of each component are uniquely labelled
     component: Component = field(repr=False) # Prevents Infinite Recursion Crashing
-    port_type: PortType = PortType.POWER_PORT
-    storage_type: StorageType | None = None # Only relevant for storage elements; otherwise None
+    type: PortType = PortType.POWER_PORT
+    storage: StorageType | None = None # Only relevant for storage elements; otherwise None
     domain: Domain | str = Domain.ABSTRACT
     fixed_causality: bool | None = field(default=None, repr=False)# If set, this port's causality will not be changed during causality assignment.
     causality: bool | None = field(default=None, repr=False) # True if causal stroke is at this port (receiving effort), None if unassigned;
@@ -180,7 +182,7 @@ class Bond:
     """Connects two ports and owns their shared causality assignment."""
     source: Port
     target: Port
-    connection_type: ConnectionType = ConnectionType.POWER_BOND
+    type: ConnectionType = ConnectionType.POWER_BOND
 
     @property
     def name(self) -> str:
@@ -199,7 +201,7 @@ class Bond:
 
     def validate_connection(self) -> None:
         """Validates the bond's source and target ports."""
-        Bond.validate(self.source, self.target, self.connection_type)
+        Bond.validate(self.source, self.target, self.type)
 
     def get_other_port(self, port: Port) -> Port:
         """Returns the opposite port of the bond given one endpoint."""
@@ -297,18 +299,18 @@ class Bond:
 
         if connection_type == ConnectionType.POWER_BOND:
            
-            if source.port_type is not PortType.POWER_PORT:
+            if source.type is not PortType.POWER_PORT:
                 raise ValueError( f"Source port {source.name} is not a valid power port.")
 
-            if target.port_type is not PortType.POWER_PORT:
+            if target.type is not PortType.POWER_PORT:
                 raise ValueError(
                     f"Target port {target.name} is not a valid power port."
                 )
         elif connection_type == ConnectionType.SIGNAL_BOND:
-            if source.port_type is not PortType.SIGNAL_PORT:
+            if source.type is not PortType.SIGNAL_PORT:
                 raise ValueError( f"Source port {source.name} is not a valid signal port.")
 
-            if target.port_type is not PortType.SIGNAL_PORT:
+            if target.type is not PortType.SIGNAL_PORT:
                 raise ValueError( f"Target port {target.name} is not a valid signal port.")
         else:
             raise ValueError(
@@ -319,7 +321,7 @@ class Bond:
 class Component:
     """Models a bond-graph element, its ports, parameters, states, and equations."""
     name: str
-    component_type: ComponentType | str = ComponentType.CUSTOM
+    type: ComponentType | str = ComponentType.CUSTOM
     domain: Domain | str = Domain.ABSTRACT
     non_invertible: bool = False # If True, the component has any constitutive relationship that cannot be algebraically inverted to solve for either effort or flow.
     # Optional parameters strictly for ComponentType.CUSTOM
@@ -330,57 +332,58 @@ class Component:
     _next_port_number: int = field(default=1, repr=False, init=False) # only used for junctions, to auto-label new ports
     bonds: set[Bond] = field(default_factory=set, repr=False, init=False) # register all bonds connected to this component, for quick lookup and deletion 
     constitutive_equations: list[str] = field(default_factory=list, repr=False, init=False) # store any constitutive equations for this component
-        
+    parameters: set[BGPhyQuantity] | None = field(default=None, repr=False, init=False) # store any parameters for this component
+
     def __post_init__(self) -> None:
         """Creates default ports based on the component type and requested count."""
         # 1-Port Elements
-        if self.component_type in (ComponentType.R, ComponentType.SE, ComponentType.SF,ComponentType.C,ComponentType.I):
-            storageType = StorageType.C_TYPE if self.component_type == ComponentType.C else StorageType.I_TYPE if self.component_type == ComponentType.I else None
-            p1=self._add_port("p1",storage_type=storageType)
+        if self.type in (ComponentType.R, ComponentType.SE, ComponentType.SF,ComponentType.C,ComponentType.I):
+            storageType = StorageType.C_TYPE if self.type == ComponentType.C else StorageType.I_TYPE if self.type == ComponentType.I else None
+            p1=self._add_port("p1",storage=storageType)
             self._available_ports.append(p1) # For 1-port elements, the single port is always available for bonding
         # 2-Port Elements
-        elif self.component_type in (ComponentType.TF, ComponentType.GY,ComponentType.IC):
-            storageType = StorageType.C_TYPE if self.component_type == ComponentType.IC else None
-            p1=self._add_port("p1",storage_type=storageType)
-            storageType = StorageType.I_TYPE if self.component_type == ComponentType.IC else None
-            p2=self._add_port("p2",storage_type=storageType)
+        elif self.type in (ComponentType.TF, ComponentType.GY,ComponentType.IC):
+            storageType = StorageType.C_TYPE if self.type == ComponentType.IC else None
+            p1=self._add_port("p1",storage=storageType)
+            storageType = StorageType.I_TYPE if self.type == ComponentType.IC else None
+            p2=self._add_port("p2",storage=storageType)
             self._available_ports.extend([p1, p2])
-        elif self.component_type in (ComponentType.MSE, ComponentType.MSF,ComponentType.MC, ComponentType.MI):
-            storageType = StorageType.C_TYPE if self.component_type == ComponentType.MC else StorageType.I_TYPE if self.component_type == ComponentType.MI else None
-            p1=self._add_port("p1",storage_type=storageType)
-            p2=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+        elif self.type in (ComponentType.MSE, ComponentType.MSF,ComponentType.MC, ComponentType.MI):
+            storageType = StorageType.C_TYPE if self.type == ComponentType.MC else StorageType.I_TYPE if self.type == ComponentType.MI else None
+            p1=self._add_port("p1",storage=storageType)
+            p2=self._add_port("mod", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2])
         # Reaction Elements
-        elif self.component_type == ComponentType.Re:
+        elif self.type == ComponentType.Re:
             p1=self._add_port("p1",fixed_causality=True)
             p2=self._add_port("p2", fixed_causality=True)
             self._available_ports.extend([p1, p2])
             self.non_invertible = True # Reactions are generally non-invertible due to their nonlinear constitutive relationships
         # 3-Port Elements
-        elif self.component_type in (ComponentType.MIC,ComponentType.MTF, ComponentType.MGY):
+        elif self.type in (ComponentType.MIC,ComponentType.MTF, ComponentType.MGY):
             p1=self._add_port("p1")
             p2=self._add_port("p2")
-            p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            p3=self._add_port("mod", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
-        elif self.component_type == ComponentType.Re_GHK:
+        elif self.type == ComponentType.Re_GHK:
             p1=self._add_port("p1", fixed_causality=True)
             p2=self._add_port("p2", fixed_causality=True)
-            p3=self._add_port("mod", port_type=PortType.SIGNAL_PORT)
+            p3=self._add_port("mod", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
             self.non_invertible = True # Modulated storage elements are generally non-invertible due to their nonlinear constitutive relationships
-        elif self.component_type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
+        elif self.type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
             pass # Junctions dynamically allocate ports as needed; no default ports are created.
-        elif self.component_type == ComponentType.BLOCK:
+        elif self.type == ComponentType.BLOCK:
             for i in range(1, self.num_signal_ports + 1):
-                p = self._add_port(f"s{i}", port_type=PortType.SIGNAL_PORT)
+                p = self._add_port(f"s{i}", type=PortType.SIGNAL_PORT)
                 self._available_ports.append(p)
-        else: # component_type == ComponentType.CUSTOM or any other unrecognized type 
+        else: # type == ComponentType.CUSTOM or any other unrecognized type 
             # For custom components, create the specified number of power and signal ports
             for i in range(1, self.num_power_ports + 1):
-                p = self._add_port(f"p{i}", port_type=PortType.POWER_PORT)
+                p = self._add_port(f"p{i}", type=PortType.POWER_PORT)
                 self._available_ports.append(p)
             for i in range(1, self.num_signal_ports + 1):
-                p = self._add_port(f"s{i}", port_type=PortType.SIGNAL_PORT)
+                p = self._add_port(f"s{i}", type=PortType.SIGNAL_PORT)
                 self._available_ports.append(p)
 
     @property
@@ -394,6 +397,16 @@ class Component:
         new_port = Port(label=label, component=self, **kwargs)
         self.ports[label] = new_port
         return new_port
+
+    def add_parameter(self, name: str, physical_quantity: PhysicalQuantity ) -> None:
+        """Adds a parameter to the component's parameter set."""
+        if self.parameters is None:
+            self.parameters = set()
+        self.parameters.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=physical_quantity))
+
+    def add_constitutive_equation(self, equation: str) -> None:
+        """Adds a constitutive equation to the component's list."""
+        self.constitutive_equations.append(equation)
 
     def release_port(self, port: Port) -> None:
         if port.bond is not None:
@@ -425,7 +438,7 @@ class Component:
     
     def get_or_create_port(self) -> Port:
         # This method is only relevant for junctions (0, 1, X0, X1). It creates a new one port.
-        if self.component_type in JUNCTIONS:
+        if self.type in JUNCTIONS:
             if self._available_ports:
                 return self._available_ports[0]  # Return the first available free port
             else: # Create a new one.
@@ -436,7 +449,7 @@ class Component:
                 return port
         else:
             raise ValueError(
-                f"Component '{self.name}' of type '{self.component_type}' does not support dynamic port allocation."
+                f"Component '{self.name}' of type '{self.type}' does not support dynamic port allocation."
             )   
 
     def get_available_ports(self) -> list[Port]:
@@ -472,6 +485,7 @@ class BondGraph:
         # Insertion-ordered mapping gives O(1) bond membership/deletion
         # while retaining deterministic iteration order.
         self._bonds: dict[Bond, None] = {}
+        self.physical_constants: set[BGPhyQuantity] | None = None # Global physical constants for the bond graph
      
     @property
     def bonds(self):
@@ -522,7 +536,7 @@ class BondGraph:
                 return available_ports[0]  # Return the first available free port
             else:
                 # For junctions, allocate a free port or create a new one
-                if arg.component_type in JUNCTIONS:
+                if arg.type in JUNCTIONS:
                     return arg.get_or_create_port()  # Dynamically allocate a new port if none are free
                 else:
                     warnings.warn(f"Component '{arg.name}' has {len(available_ports)} free ports, please specify which one to use.")
@@ -669,7 +683,13 @@ class BondGraph:
                 warnings.warn(f"Could not resolve '{arg}' to a valid component or port for domain assignment.")
         else:
             warnings.warn(f"Invalid argument type: {type(arg)}. Expected Component, Port, or str.")
- 
+
+    def add_physical_constant(self, name: str, physical_quantity: PhysicalQuantity) -> None:
+        """Adds a global physical constant to the bond graph."""
+        if self.physical_constants is None:
+            self.physical_constants = set()
+        self.physical_constants.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=physical_quantity))
+
 def print_bond_table(bg: BondGraph) -> None:
     """Prints a terminal representation of bonds and causality."""
     print(f"\n--- Causality Summary: {bg.name} ---")
@@ -704,20 +724,20 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
         # Render Component Nodes
         for comp_name, comp in bg.components.items():
             label=''
-            if comp.component_type in JUNCTIONS:
-                if comp.component_type == ComponentType.ONE:
+            if comp.type in JUNCTIONS:
+                if comp.type == ComponentType.ONE:
                     label = "1"
-                elif comp.component_type == ComponentType.ZERO:
+                elif comp.type == ComponentType.ZERO:
                     label = "0"
-                elif comp.component_type == ComponentType.XONE:
+                elif comp.type == ComponentType.XONE:
                     label = "X1"
-                elif comp.component_type == ComponentType.XZERO:
+                elif comp.type == ComponentType.XZERO:
                     label = "X0"
             else:
-                if isinstance(comp.component_type, ComponentType):
-                    label = f"{comp.component_type.name}: {comp_name}"
+                if isinstance(comp.type, ComponentType):
+                    label = f"{comp.type.name}: {comp_name}"
                 else:
-                    label = f"{comp.component_type}: {comp_name}"
+                    label = f"{comp.type}: {comp_name}"
 
             dot.node(comp_name, label=label)
 
@@ -769,12 +789,15 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         "components": [],
         "bonds": []
     }
-    
+    if bg.physical_constants is not None:
+        data["physical_constants"] = {}
+        for pq in bg.physical_constants:
+            data["physical_constants"][pq.id] = pq.physical_quantity
     # 1. Export Components and Ports
     for comp in bg.components.values():
         c_data = {
             "name": comp.name,
-            "component_type": comp.component_type.name if isinstance(comp.component_type, ComponentType) else comp.component_type,
+            "type": comp.type.name if isinstance(comp.type, ComponentType) else comp.type,
             "domain": comp.domain.name if isinstance(comp.domain, Domain) else comp.domain,
             "non_invertible": comp.non_invertible,
             "num_power_ports": comp.num_power_ports,
@@ -783,12 +806,16 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         }
         if len(comp.constitutive_equations) > 0:
             c_data["constitutive_equations"] = comp.constitutive_equations
+        if comp.parameters is not None:
+            c_data["parameters"] = {}
+            for  pq in comp.parameters:
+                c_data["parameters"][pq.id] = pq.physical_quantity
 
         for port_label, port in comp.ports.items():
             p_data = {
                 "label": port_label,
-                "port_type": port.port_type.name,
-                "storage_type": port.storage_type.name if port.storage_type else None,
+                "type": port.type.name,
+                "storage": port.storage.name if port.storage else None,
                 "domain": port.domain.name if isinstance(port.domain, Domain) else port.domain,
                 "fixed_causality": port.fixed_causality,
                 "causality": port.causality
@@ -813,7 +840,7 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         data["bonds"].append({
             "source": bond.source.name,  # Uses Port.name (Component.label)[cite: 2]
             "target": bond.target.name,  # Uses Port.name (Component.label)[cite: 2]
-            "connection_type": bond.connection_type.name
+            "type": bond.type.name
         })
 
     with open(json_file, "w") as f:
@@ -825,9 +852,13 @@ def importBG(json_file: str) -> BondGraph:
         data = json.load(f)
     bg = BondGraph(name=data.get("name", "Imported_BG"))
 
+    if "physical_constants" in data:
+        bg.physical_constants = set()
+        for name, pq in data["physical_constants"].items():
+            bg.physical_constants.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=pq))
     # 1. Reconstruct Components and Ports
     for c_data in data.get("components", []):
-        c_type_val = c_data["component_type"]
+        c_type_val = c_data["type"]
         domain_val = c_data["domain"]
         
         c_type = getattr(ComponentType, c_type_val, c_type_val)
@@ -835,7 +866,7 @@ def importBG(json_file: str) -> BondGraph:
         
         comp = bg.add_component(
             c_data["name"], 
-            component_type=c_type, 
+            type=c_type, 
             domain=domain,
             num_power_ports=c_data.get("num_power_ports", 1),
             num_signal_ports=c_data.get("num_signal_ports", 0)
@@ -843,18 +874,21 @@ def importBG(json_file: str) -> BondGraph:
         comp.non_invertible = c_data.get("non_invertible", False)
         if "constitutive_equations" in c_data:
             comp.constitutive_equations = c_data["constitutive_equations"]
-        
+        if "parameters" in c_data:
+            comp.parameters = set()
+            for name, pq in c_data["parameters"].items():
+                comp.parameters.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=pq))
         # Restore precise port states (crucial for junctions which do not auto-generate ports[cite: 2])
         for p_data in c_data.get("ports", []):
             label = p_data["label"]
             
             # If __post_init__ didn't create the port (e.g., Junctions), create it now
             if label not in comp.ports:
-                p_type = getattr(PortType, p_data.get("port_type", "POWER_PORT"))
-                s_type = getattr(StorageType, p_data.get("storage_type")) if p_data.get("storage_type") else None
+                p_type = getattr(PortType, p_data.get("type", "POWER_PORT"))
+                s_type = getattr(StorageType, p_data.get("storage")) if p_data.get("storage") else None
                 p_domain = getattr(Domain, p_data.get("domain")) if p_data.get("domain") in Domain.__members__ else p_data.get("domain", Domain.ABSTRACT)
                 
-                comp._add_port(label, port_type=p_type, storage_type=s_type, domain=p_domain)
+                comp._add_port(label, type=p_type, storage=s_type, domain=p_domain)
             # Keep the _next_port_number updated for junctions
             if label.startswith("p"):
                 try:
@@ -882,13 +916,13 @@ def importBG(json_file: str) -> BondGraph:
 
     # 2. Reconstruct Bonds
     for b_data in data.get("bonds", []):
-        conn_type = getattr(ConnectionType, b_data.get("connection_type", "POWER_BOND"))
+        b_type = getattr(ConnectionType, b_data.get("type", "POWER_BOND"))
         
         # Uses _resolve_string natively to map "Component.label" to the correct port[cite: 2]
         bg.add_bond(
             source=b_data["source"],
             target=b_data["target"],
-            connection_type=conn_type
+            type=b_type
         )
 
     return bg
@@ -897,11 +931,11 @@ if __name__ == "__main__":
     # Construct the system: Mass (I), Spring (C), Damper (R), Force Source (SE)
     bg = BondGraph("Mass_Spring_Damper")
     # Add components
-    se = bg.add_component("SE_Force", component_type=ComponentType.SE)
-    j1 = bg.add_component("J1", component_type=ComponentType.ONE)
-    mass = bg.add_component("I_Mass", component_type=ComponentType.I)
-    spring = bg.add_component("C_Spring", component_type=ComponentType.C)
-    damper = bg.add_component("R_Damper", component_type=ComponentType.R)
+    se = bg.add_component("SE_Force", type=ComponentType.SE)
+    j1 = bg.add_component("J1", type=ComponentType.ONE)
+    mass = bg.add_component("I_Mass", type=ComponentType.I)
+    spring = bg.add_component("C_Spring", type=ComponentType.C)
+    damper = bg.add_component("R_Damper", type=ComponentType.R)
     # Connect components via bonds
     bg.add_bond(se, j1)
     bg.add_bond(j1, mass)

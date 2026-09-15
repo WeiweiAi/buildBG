@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG
+from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,PhysicalQuantity,Domain,importBG
+import sympy as sp
+import json
 @dataclass
 class Equation:
     """Represents a single equation: y = f(x) with a description."""
@@ -61,7 +63,7 @@ class EquationBuilder:
         # ------------------------------------------------------------------       
 
         for comp in self.graph.components.values():
-            if comp.component_type in JUNCTIONS:
+            if comp.type in JUNCTIONS:
                 continue
             for port in comp.ports.values():
                 if port.bond is None:
@@ -112,7 +114,7 @@ class EquationBuilder:
 
             power_bonds = [bond
                 for bond in junction.bonds
-                if bond.connection_type == ConnectionType.POWER_BOND
+                if bond.type == ConnectionType.POWER_BOND
             ]
             if len(power_bonds) < 2:
                 return None
@@ -188,7 +190,7 @@ class EquationBuilder:
          # False -> flow is network supplied
         equations = []
         for comp in self.graph.components.values():            
-            if comp.component_type in JUNCTIONS:
+            if comp.type in JUNCTIONS:
                 continue                
             for port in comp.ports.values():                
                 if port.bond is None:
@@ -237,7 +239,7 @@ class EquationBuilder:
 
             for bond in junction.bonds:
             
-                if bond.connection_type != ConnectionType.POWER_BOND:
+                if bond.type != ConnectionType.POWER_BOND:
                     continue
                 
                 junction_port = self._get_port_for_component(
@@ -330,7 +332,7 @@ class EquationBuilder:
             if not rhs:
                 rhs = "0"
 
-            junction_type_name = junction.component_type.name if isinstance(junction.component_type, ComponentType) else str(junction.component_type)
+            junction_type_name = junction.type.name if isinstance(junction.type, ComponentType) else str(junction.type)
             return Equation(f"{dependent_port.name}",
                             BGVariable[rule.conserved_variable.upper()],
                 f"{dependent_expression} = {rhs}",
@@ -343,13 +345,13 @@ class EquationBuilder:
             variable_expr: dict,
         ) -> list[Equation]:
 
-            if junction.component_type in (
+            if junction.type in (
                 ComponentType.ZERO,
                 ComponentType.XZERO,
             ):
                 rule = ZERO_RULE
 
-            elif junction.component_type in (
+            elif junction.type in (
                 ComponentType.ONE,
                 ComponentType.XONE,
             ):
@@ -429,19 +431,250 @@ class EquationBuilder:
             #  Generate junction conservation equations.
             equations: list[Equation] = []
             for junction in self.graph.components.values():
-                if junction.component_type not in JUNCTIONS:
+                if junction.type not in JUNCTIONS:
                     continue            
                 equation = self._generate_junction_equations(junction, variable_expr)                
                 if len(equation) > 0 :
                     equations.extend(equation)
             # Generate input equations for non-junction components.
             equations=equations+self._generate_component_input_equations(variable_expr)
-            return equations     
+            return equations 
+    
+    def _generate_constitutive_equations(self) -> list[Equation]:
+        """
+        Uses SymPy to solve component zero-form equations based on causality.
+        """
+        equations = []
+
+        subs_map_graph = {}
+        if hasattr(self.graph, 'physical_constants') and self.graph.physical_constants is not None:
+            for pq in self.graph.physical_constants:
+                param_generic = sp.Symbol(pq.physical_quantity.symbol if pq.physical_quantity and pq.physical_quantity.symbol else pq.id)
+                param_id = sp.Symbol(pq.id)
+                subs_map_graph[param_generic] = param_id
+        
+        for comp in self.graph.components.values():
+            # Skip junctions, they are handled by the network equations
+            if comp.type in JUNCTIONS:
+                continue
+                
+            if not hasattr(comp, 'constitutive_equations') or not comp.constitutive_equations:
+                continue
+                
+            dependent_symbols = []
+            symbol_to_port = {}
+            subs_map = {}
+            if comp.parameters is not None:
+                for pq in comp.parameters:
+                    param_generic = sp.Symbol(pq.physical_quantity.symbol if pq.physical_quantity and pq.physical_quantity.symbol else pq.id)
+                    param_id = sp.Symbol(pq.id)
+                    subs_map[param_generic] = param_id
+            # 1. Map generic variables (e_0, f_0) to unique port IDs
+            for i, (port_label, port) in enumerate(comp.ports.items()):
+                e_generic = sp.Symbol(f"e_{i}")
+                f_generic = sp.Symbol(f"f_{i}")
+                q_generic = sp.Symbol(f"q_{i}")
+                p_generic = sp.Symbol(f"p_{i}")
+                s_generic = sp.Symbol(f"s_{i}")
+                
+                e_id = sp.Symbol(port.effort.id)
+                f_id = sp.Symbol(port.flow.id)
+                q_id = sp.Symbol(port.quantity.id)
+                p_id = sp.Symbol(port.momentum.id)
+                s_id = sp.Symbol(port.signal.id)
+                
+                subs_map[e_generic] = e_id
+                subs_map[f_generic] = f_id
+                subs_map[q_generic] = q_id
+                subs_map[p_generic] = p_id
+                subs_map[s_generic] = s_id
+                
+                # 2. Determine what to solve for based on causality
+                if port.causality is True:
+                    # Port receives effort -> Component provides flow
+                    dependent_symbols.append(f_id)
+                    symbol_to_port[f_id] = (port.name, BGVariable.FLOW)
+                elif port.causality is False:
+                    # Port provides effort -> Component receives flow
+                    dependent_symbols.append(e_id)
+                    symbol_to_port[e_id] = (port.name, BGVariable.EFFORT)
+
+            # 3. Parse strings into SymPy objects and substitute generic variables with IDs
+            raw_exprs = [sp.parse_expr(eq) for eq in comp.constitutive_equations]
+            id_exprs = [expr.subs(subs_map | subs_map_graph) for expr in raw_exprs]
+            
+            # 4. Solve the system of equations for the dependent variables
+            try:
+                # dict=True returns a list of dictionaries mapping dependent symbols to expressions
+                solutions = sp.solve(id_exprs, dependent_symbols, dict=True)
+                
+                if solutions:
+                    sol_dict = solutions[0]
+                    for dep_sym, solved_expr in sol_dict.items():
+                        port_name, var_type = symbol_to_port[dep_sym]
+                        equations.append(
+                            Equation(
+                                port_name=port_name,
+                                variable=var_type,
+                                expression=f"{dep_sym} = {solved_expr}",
+                                description=f"{comp.type.name} constitutive equation for {comp.name}" if isinstance(comp.type, ComponentType) else f"Constitutive equation for {comp.name}"
+                            )
+                        )
+            except Exception as e:
+                print(f"Warning: Could not solve constitutive equations for {comp.name}. Error: {e}")
+                
+        return equations
+
+    def translate_to_symbols(self, equations: list[Equation]) -> list[Equation]:
+        """
+        Uses SymPy to safely substitute abstract IDs with physical domain symbols.
+        """
+        id_to_symbol = {}
+        
+        # 1. Build the global translation dictionary
+        for comp in self.graph.components.values():
+            for port in comp.ports.values():
+                for var_type in ["effort", "flow", "quantity", "momentum", "signal"]:
+                    bg_var = getattr(port, var_type, None)
+                    if bg_var and hasattr(bg_var, 'id'):
+                        # If a physical symbol was assigned via the DomainRefiner, use it
+                        if hasattr(bg_var, 'physical_quantity') and bg_var.physical_quantity and bg_var.physical_quantity.symbol:
+                            # Append the port name to ensure symbols are unique (e.g., u_comp_p1) replace comp.p1 dot with underscore
+                            sym = f"{bg_var.physical_quantity.symbol}_{port.name.replace('.', '_')}"
+                            id_to_symbol[sp.Symbol(bg_var.id)] = sp.Symbol(sym)
+                        else:
+                            # Fallback to the abstract ID if no physics are assigned
+                            id_to_symbol[sp.Symbol(bg_var.id)] = sp.Symbol(bg_var.id)
+                            
+            # Map component-specific parameters
+            if hasattr(comp, 'parameters') and comp.parameters is not None:
+                for pq in comp.parameters:
+                    sym = pq.physical_quantity.symbol if pq.physical_quantity and pq.physical_quantity.symbol else pq.id
+                    # Make parameter symbol unique to the component to avoid clashing
+                    id_to_symbol[sp.Symbol(pq.id)] = sp.Symbol(f"{sym}_{comp.name}")
+                    
+        # Map global parameters (like R, T, F)
+        if hasattr(self.graph, 'physical_constants') and self.graph.physical_constants is not None:
+            for pq in self.graph.physical_constants:
+                sym = pq.physical_quantity.symbol if pq.physical_quantity and pq.physical_quantity.symbol else pq.id
+                id_to_symbol[sp.Symbol(pq.id)] = sp.Symbol(sym)
+
+        # 2. Translate the equations safely using SymPy
+        translated_equations = []
+        for eq in equations:
+            try:
+                # Split into LHS and RHS for substitution
+                lhs_str, rhs_str = eq.expression.split("=")
+                lhs_expr = sp.parse_expr(lhs_str.strip())
+                rhs_expr = sp.parse_expr(rhs_str.strip())
+                
+                new_lhs = lhs_expr.subs(id_to_symbol)
+                new_rhs = rhs_expr.subs(id_to_symbol)
+                
+                translated_equations.append(
+                    Equation(
+                        port_name=eq.port_name,
+                        variable=eq.variable,
+                        expression=f"{new_lhs} = {new_rhs}",
+                        description=eq.description
+                    )
+                )
+            except Exception as e:
+                print(f"Warning: Failed to translate equation '{eq.expression}'. Error: {e}")
+                translated_equations.append(eq) # Return untranslated on failure
+                
+        return translated_equations    
+
+class DomainRefiner:
+    """Decorates abstract Bond Graph components with physical domain knowledge."""
+    
+    def __init__(self, catalog_path: str) -> None:
+        with open(catalog_path, 'r') as f:
+            self.catalog = json.load(f)
+
+    def refine_component(self, component: Component, domain: Domain, template_id: str | None = None) -> None:
+        """Applies domain variables, parameters, and equations to an existing component."""
+        component.domain = domain
+        domain_data = self.catalog.get(domain.name, {})
+
+        if not template_id:
+            template_id = getattr(component.type, 'name', str(component.type))
+            
+        comp_metadata = domain_data.get("components", {}).get(template_id, {})
+        port_domain_overrides = comp_metadata.get("port_domains", {})
+
+        # 1. Map domain variables to ports (handling multi-domain overrides)
+        for port_label, port in component.ports.items():
+            # Check if this specific port has a designated domain in the JSON
+            override_domain_str = port_domain_overrides.get(port_label)
+            
+            if override_domain_str:
+                # Resolve the string to your Domain enum
+                port_domain_enum = getattr(Domain, override_domain_str, Domain.ABSTRACT)
+                port.domain = port_domain_enum
+                
+                # Fetch the correct variable definitions from the overarching catalog
+                port_domain_data = self.catalog.get(override_domain_str, {})
+                domain_vars = port_domain_data.get("domain_variables", {})
+            else:
+                # Fallback to the component's primary domain
+                port.domain = domain
+                domain_vars = domain_data.get("domain_variables", {})
+
+            # Apply the variables via the @property setters
+            for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
+                if var_key in domain_vars:
+                    pq = PhysicalQuantity(**domain_vars[var_key])
+                    setattr(port, var_key, pq)
+
+        # 2. Apply Equations & Parameters
+        if comp_metadata:
+            for eq in comp_metadata.get("constitutive_equations", []):
+                if eq not in component.constitutive_equations:
+                    component.add_constitutive_equation(eq)
+            
+            for p_name, p_data in comp_metadata.get("parameters", {}).items():
+                component.add_parameter(p_name, PhysicalQuantity(**p_data))
+
+    def refine_graph(self, bg: BondGraph, refinement_map: dict[str, tuple[Domain, str]]) -> None:
+        """Batch refines a whole graph and extracts global parameters."""
+    
+        # 1. Apply global parameters to the graph first
+        for domain, _ in refinement_map.values():
+            domain_data = self.catalog.get(domain.name, {})
+            for g_name, g_data in domain_data.get("physical_constants", {}).items():
+                if g_name not in bg.physical_constants:
+                    bg.add_physical_constant(g_name, PhysicalQuantity(**g_data))
+    
+        # 2. Refine individual components
+        for comp_name, (domain, template_id) in refinement_map.items():
+            comp = bg.components.get(comp_name)
+            if comp:
+                self.refine_component(comp, domain, template_id)
 
 if __name__ == "__main__":
     # Example usage
     bg = importBG("mass_spring_damper_causality.json")
+    # 2. Refine with Domain Knowledge
+    refiner = DomainRefiner("domain_catalog.json")
+    refiner.refine_graph(bg, {
+        "I_Mass": (Domain.MECHANICAL_TRANSLATIONAL, "I"),
+        "C_Spring": (Domain.MECHANICAL_TRANSLATIONAL, "C"),
+        "R_damper": (Domain.MECHANICAL_TRANSLATIONAL, "R")
+    })
     builder = EquationBuilder(bg)
+    
     equations = builder.generate_network_equations()
+    print("Network Equations:")
     for eq in equations:
         print("port_name:", eq.port_name, "variable:", eq.variable, "\n", "expression:", eq.expression, "\n","description:", eq.description)
+
+    constitutive_eqs = builder._generate_constitutive_equations()
+    print("\nConstitutive Equations:")
+    for eq in constitutive_eqs:
+        print("port_name:", eq.port_name, "variable:", eq.variable, "\n", "expression:", eq.expression, "\n","description:", eq.description)
+
+    equations_with_symbols = builder.translate_to_symbols(equations + constitutive_eqs)
+    print("\nEquations with Physical Symbols:")
+    for eq in equations_with_symbols:
+        print("port_name:", eq.port_name, "variable:", eq.variable, "\n", "expression:", eq.expression, "\n","description:", eq.description)    
