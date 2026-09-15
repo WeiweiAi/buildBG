@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,PhysicalQuantity,Domain,importBG
+from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG
 import sympy as sp
-import json
+
 @dataclass
 class Equation:
     """Represents a single equation: y = f(x) with a description."""
@@ -585,83 +585,9 @@ class EquationBuilder:
                 
         return translated_equations    
 
-class DomainRefiner:
-    """Decorates abstract Bond Graph components with physical domain knowledge."""
-    
-    def __init__(self, catalog_path: str) -> None:
-        with open(catalog_path, 'r') as f:
-            self.catalog = json.load(f)
-
-    def refine_component(self, component: Component, domain: Domain, template_id: str | None = None) -> None:
-        """Applies domain variables, parameters, and equations to an existing component."""
-        component.domain = domain
-        domain_data = self.catalog.get(domain.name, {})
-
-        if not template_id:
-            template_id = getattr(component.type, 'name', str(component.type))
-            
-        comp_metadata = domain_data.get("components", {}).get(template_id, {})
-        port_domain_overrides = comp_metadata.get("port_domains", {})
-
-        # 1. Map domain variables to ports (handling multi-domain overrides)
-        for port_label, port in component.ports.items():
-            # Check if this specific port has a designated domain in the JSON
-            override_domain_str = port_domain_overrides.get(port_label)
-            
-            if override_domain_str:
-                # Resolve the string to your Domain enum
-                port_domain_enum = getattr(Domain, override_domain_str, Domain.ABSTRACT)
-                port.domain = port_domain_enum
-                
-                # Fetch the correct variable definitions from the overarching catalog
-                port_domain_data = self.catalog.get(override_domain_str, {})
-                domain_vars = port_domain_data.get("domain_variables", {})
-            else:
-                # Fallback to the component's primary domain
-                port.domain = domain
-                domain_vars = domain_data.get("domain_variables", {})
-
-            # Apply the variables via the @property setters
-            for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
-                if var_key in domain_vars:
-                    pq = PhysicalQuantity(**domain_vars[var_key])
-                    setattr(port, var_key, pq)
-
-        # 2. Apply Equations & Parameters
-        if comp_metadata:
-            for eq in comp_metadata.get("constitutive_equations", []):
-                if eq not in component.constitutive_equations:
-                    component.add_constitutive_equation(eq)
-            
-            for p_name, p_data in comp_metadata.get("parameters", {}).items():
-                component.add_parameter(p_name, PhysicalQuantity(**p_data))
-
-    def refine_graph(self, bg: BondGraph, refinement_map: dict[str, tuple[Domain, str]]) -> None:
-        """Batch refines a whole graph and extracts global parameters."""
-    
-        # 1. Apply global parameters to the graph first
-        for domain, _ in refinement_map.values():
-            domain_data = self.catalog.get(domain.name, {})
-            for g_name, g_data in domain_data.get("physical_constants", {}).items():
-                if g_name not in bg.physical_constants:
-                    bg.add_physical_constant(g_name, PhysicalQuantity(**g_data))
-    
-        # 2. Refine individual components
-        for comp_name, (domain, template_id) in refinement_map.items():
-            comp = bg.components.get(comp_name)
-            if comp:
-                self.refine_component(comp, domain, template_id)
-
 if __name__ == "__main__":
     # Example usage
     bg = importBG("mass_spring_damper_causality.json")
-    # 2. Refine with Domain Knowledge
-    refiner = DomainRefiner("domain_catalog.json")
-    refiner.refine_graph(bg, {
-        "I_Mass": (Domain.MECHANICAL_TRANSLATIONAL, "I"),
-        "C_Spring": (Domain.MECHANICAL_TRANSLATIONAL, "C"),
-        "R_damper": (Domain.MECHANICAL_TRANSLATIONAL, "R")
-    })
     builder = EquationBuilder(bg)
     
     equations = builder.generate_network_equations()

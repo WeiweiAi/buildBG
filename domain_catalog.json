@@ -138,7 +138,7 @@
         },
         "constitutive_equations": ["e_0 - k * q_0",  "ode(q_0,t) - f_0"]
       },
-      "M": {
+      "I": {
         "description": " mass",
         "parameters": {
           "m": {"description": "mass", "value": 1, "units": "J_s2_per_um2", "symbol": "m"}

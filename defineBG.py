@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum, auto
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from collections import deque
 import warnings
 import graphviz
@@ -131,7 +131,7 @@ class Port:
     def effort(self) -> BGPhyQuantity:
         """Returns this port's effort description, if assigned."""
         # Returns the stored symbol, or None if it hasn't been set yet.
-        return BGPhyQuantity(f'e_{self.name}',BGVariable.EFFORT, getattr(self, '_effort', None))  
+        return BGPhyQuantity(f'e_{self.name.replace('.', '_')}',BGVariable.EFFORT, getattr(self, '_effort', None))  
 
     @effort.setter
     def effort(self, physical: PhysicalQuantity) -> None:
@@ -141,7 +141,7 @@ class Port:
     @property
     def flow(self) -> BGPhyQuantity:
         """Returns this port's flow description, if assigned."""
-        return BGPhyQuantity(f'f_{self.name}',BGVariable.FLOW, getattr(self, '_flow', None))  
+        return BGPhyQuantity(f'f_{self.name.replace('.', '_')}',BGVariable.FLOW, getattr(self, '_flow', None))  
 
     @flow.setter
     def flow(self, physical: PhysicalQuantity) -> None:
@@ -151,7 +151,7 @@ class Port:
     @property
     def quantity(self) -> BGPhyQuantity:
         """Returns this port's quantity description, if assigned."""
-        return BGPhyQuantity(f'q_{self.name}',BGVariable.QUANTITY, getattr(self, '_quantity', None))  
+        return BGPhyQuantity(f'q_{self.name.replace('.', '_')}',BGVariable.QUANTITY, getattr(self, '_quantity', None))  
 
     @quantity.setter
     def quantity(self, physical: PhysicalQuantity) -> None:
@@ -161,7 +161,7 @@ class Port:
     @property
     def momentum(self) -> BGPhyQuantity:
         """Returns this port's momentum description, if assigned."""
-        return BGPhyQuantity(f"p_{self.name}", BGVariable.MOMENTUM, getattr(self, '_momentum', None))  
+        return BGPhyQuantity(f"p_{self.name.replace('.', '_')}", BGVariable.MOMENTUM, getattr(self, '_momentum', None))  
     
     @momentum.setter
     def momentum(self, physical: PhysicalQuantity) -> None:
@@ -171,7 +171,7 @@ class Port:
     @property
     def signal(self) -> BGPhyQuantity:
         """Returns this port's signal description, if assigned."""
-        return BGPhyQuantity(f"s_{self.name}", BGVariable.SIGNAL, getattr(self, '_signal', None))  
+        return BGPhyQuantity(f"s_{self.name.replace('.', '_')}", BGVariable.SIGNAL, getattr(self, '_signal', None))  
     
     @signal.setter
     def signal(self, physical: PhysicalQuantity) -> None:
@@ -690,6 +690,73 @@ class BondGraph:
             self.physical_constants = set()
         self.physical_constants.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=physical_quantity))
 
+class DomainRefiner:
+    """Decorates abstract Bond Graph components with physical domain knowledge."""
+    
+    def __init__(self, catalog_path: str) -> None:
+        with open(catalog_path, 'r') as f:
+            self.catalog = json.load(f)
+
+    def refine_component(self, component: Component, domain: Domain, template_id: str | None = None) -> None:
+        """Applies domain variables, parameters, and equations to an existing component."""
+        component.domain = domain
+        domain_data = self.catalog.get(domain.name, {})
+
+        if not template_id:
+            template_id = getattr(component.type, 'name', str(component.type))
+            
+        comp_metadata = domain_data.get("components", {}).get(template_id, {})
+        port_domain_overrides = comp_metadata.get("port_domains", {})
+
+        # 1. Map domain variables to ports (handling multi-domain overrides)
+        for port_label, port in component.ports.items():
+            # Check if this specific port has a designated domain in the JSON
+            override_domain_str = port_domain_overrides.get(port_label)
+            
+            if override_domain_str:
+                # Resolve the string to your Domain enum
+                port_domain_enum = getattr(Domain, override_domain_str, Domain.ABSTRACT)
+                port.domain = port_domain_enum
+                
+                # Fetch the correct variable definitions from the overarching catalog
+                port_domain_data = self.catalog.get(override_domain_str, {})
+                domain_vars = port_domain_data.get("domain_variables", {})
+            else:
+                # Fallback to the component's primary domain
+                port.domain = domain
+                domain_vars = domain_data.get("domain_variables", {})
+
+            # Apply the variables via the @property setters
+            for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
+                if var_key in domain_vars:
+                    pq = PhysicalQuantity(**domain_vars[var_key])
+                    setattr(port, var_key, pq)
+
+        # 2. Apply Equations & Parameters
+        if comp_metadata:
+            for eq in comp_metadata.get("constitutive_equations", []):
+                if eq not in component.constitutive_equations:
+                    component.add_constitutive_equation(eq)
+            
+            for p_name, p_data in comp_metadata.get("parameters", {}).items():
+                component.add_parameter(p_name, PhysicalQuantity(**p_data))
+
+    def refine_graph(self, bg: BondGraph, refinement_map: dict[str, tuple[Domain, str]]) -> None:
+        """Batch refines a whole graph and extracts global parameters."""
+    
+        # 1. Apply global parameters to the graph first
+        for domain, _ in refinement_map.values():
+            domain_data = self.catalog.get(domain.name, {})
+            for g_name, g_data in domain_data.get("physical_constants", {}).items():
+                if g_name not in bg.physical_constants:
+                    bg.add_physical_constant(g_name, PhysicalQuantity(**g_data))
+    
+        # 2. Refine individual components
+        for comp_name, (domain, template_id) in refinement_map.items():
+            comp = bg.components.get(comp_name)
+            if comp:
+                self.refine_component(comp, domain, template_id)
+
 def print_bond_table(bg: BondGraph) -> None:
     """Prints a terminal representation of bonds and causality."""
     print(f"\n--- Causality Summary: {bg.name} ---")
@@ -782,6 +849,14 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
 
 import json
 
+def _pq_to_serializable(physical_quantity: PhysicalQuantity) -> dict:
+    """Converts a PhysicalQuantity dataclass to a dict, passing through other values unchanged."""
+    return asdict(physical_quantity) if is_dataclass(physical_quantity) else physical_quantity
+
+def _pq_from_serializable(data: dict) -> PhysicalQuantity | None:
+    """Reconstructs a PhysicalQuantity from an imported dict."""
+    return PhysicalQuantity(**data) if isinstance(data, dict) else None
+
 def exportBG(bg: BondGraph,json_file: str) -> None:
     """Serializes a BondGraph object and all state variables to a JSON string."""
     data = {
@@ -792,7 +867,7 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
     if bg.physical_constants is not None:
         data["physical_constants"] = {}
         for pq in bg.physical_constants:
-            data["physical_constants"][pq.id] = pq.physical_quantity
+            data["physical_constants"][pq.id] = _pq_to_serializable(pq.physical_quantity) if pq.physical_quantity is not None else None
     # 1. Export Components and Ports
     for comp in bg.components.values():
         c_data = {
@@ -809,7 +884,7 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         if comp.parameters is not None:
             c_data["parameters"] = {}
             for  pq in comp.parameters:
-                c_data["parameters"][pq.id] = pq.physical_quantity
+                c_data["parameters"][pq.id] = _pq_to_serializable(pq.physical_quantity) if pq.physical_quantity is not None else None
 
         for port_label, port in comp.ports.items():
             p_data = {
@@ -821,15 +896,15 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
                 "causality": port.causality
                 }
             if port.effort.physical_quantity is not None:
-                p_data["effort"]["physical_quantity"] = port.effort.physical_quantity
+                p_data["effort"] = _pq_to_serializable(port.effort.physical_quantity)
             if port.flow.physical_quantity is not None:
-                p_data["flow"]["physical_quantity"] = port.flow.physical_quantity
+                p_data["flow"]= _pq_to_serializable(port.flow.physical_quantity)
             if port.quantity.physical_quantity is not None:
-                p_data["quantity"]["physical_quantity"] = port.quantity.physical_quantity
+                p_data["quantity"] = _pq_to_serializable(port.quantity.physical_quantity)
             if port.momentum.physical_quantity is not None:
-                p_data["momentum"]["physical_quantity"] = port.momentum.physical_quantity
+                p_data["momentum"] =  _pq_to_serializable(port.momentum.physical_quantity)
             if port.signal.physical_quantity is not None:
-                p_data["signal"]["physical_quantity"] = port.signal.physical_quantity
+                p_data["signal"]=_pq_to_serializable(port.signal.physical_quantity)
 
             c_data["ports"].append(p_data)
             
@@ -838,8 +913,8 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
     # 2. Export Bonds
     for bond in bg.bonds:
         data["bonds"].append({
-            "source": bond.source.name,  # Uses Port.name (Component.label)[cite: 2]
-            "target": bond.target.name,  # Uses Port.name (Component.label)[cite: 2]
+            "source": bond.source.name,  # Uses Port.name (Component.label)
+            "target": bond.target.name,  # Uses Port.name (Component.label)
             "type": bond.type.name
         })
 
@@ -855,7 +930,9 @@ def importBG(json_file: str) -> BondGraph:
     if "physical_constants" in data:
         bg.physical_constants = set()
         for name, pq in data["physical_constants"].items():
-            bg.physical_constants.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=pq))
+            pq_obj = _pq_from_serializable(pq)
+            if pq_obj is not None:
+                bg.add_physical_constant(name, pq_obj)
     # 1. Reconstruct Components and Ports
     for c_data in data.get("components", []):
         c_type_val = c_data["type"]
@@ -877,18 +954,18 @@ def importBG(json_file: str) -> BondGraph:
         if "parameters" in c_data:
             comp.parameters = set()
             for name, pq in c_data["parameters"].items():
-                comp.parameters.add(BGPhyQuantity(id=name, type=BGVariable.CONSTANT, physical_quantity=pq))
-        # Restore precise port states (crucial for junctions which do not auto-generate ports[cite: 2])
+                pq_obj = _pq_from_serializable(pq)
+                if pq_obj is not None:
+                    comp.add_parameter(name, pq_obj)
+        # Restore precise port states (crucial for junctions which do not auto-generate ports)
         for p_data in c_data.get("ports", []):
             label = p_data["label"]
-            
+            p_domain = getattr(Domain, p_data.get("domain")) if p_data.get("domain") in Domain.__members__ else p_data.get("domain", Domain.ABSTRACT)
+
             # If __post_init__ didn't create the port (e.g., Junctions), create it now
             if label not in comp.ports:
                 p_type = getattr(PortType, p_data.get("type", "POWER_PORT"))
-                s_type = getattr(StorageType, p_data.get("storage")) if p_data.get("storage") else None
-                p_domain = getattr(Domain, p_data.get("domain")) if p_data.get("domain") in Domain.__members__ else p_data.get("domain", Domain.ABSTRACT)
-                
-                comp._add_port(label, type=p_type, storage=s_type, domain=p_domain)
+                comp._add_port(label, type=p_type, domain=p_domain)
             # Keep the _next_port_number updated for junctions
             if label.startswith("p"):
                 try:
@@ -899,6 +976,7 @@ def importBG(json_file: str) -> BondGraph:
                     pass                   
             # Apply state variables
             port = comp.ports[label]
+            port.domain = p_domain  # Ports created eagerly by __post_init__ also need the restored domain
             port.fixed_causality = p_data.get("fixed_causality")
             port.causality = p_data.get("causality")
 
@@ -906,11 +984,12 @@ def importBG(json_file: str) -> BondGraph:
             for var_type in ["effort", "flow", "quantity", "momentum", "signal"]:
                 var_data = p_data.get(var_type)
                 if var_data:
-                    physical_quantity = var_data.get("physical_quantity")
-                    if physical_quantity is not None:
-                        setattr(getattr(port, var_type), "physical_quantity", physical_quantity)
+                    # port.effort/flow/... are properties backed by _effort/_flow/...;
+                    # assign through the setter, not the throwaway getter object.
+                    if _pq_from_serializable(var_data) is not None:
+                        setattr(port, var_type, _pq_from_serializable(var_data))
             
-            # Re-register port availability[cite: 2]
+            # Re-register port availability
             if not port.bond and port not in comp._available_ports:
                 comp._available_ports.append(port)
 
@@ -918,7 +997,7 @@ def importBG(json_file: str) -> BondGraph:
     for b_data in data.get("bonds", []):
         b_type = getattr(ConnectionType, b_data.get("type", "POWER_BOND"))
         
-        # Uses _resolve_string natively to map "Component.label" to the correct port[cite: 2]
+        # Uses _resolve_string natively to map "Component.label" to the correct port
         bg.add_bond(
             source=b_data["source"],
             target=b_data["target"],
@@ -941,12 +1020,22 @@ if __name__ == "__main__":
     bg.add_bond(j1, mass)
     bg.add_bond(j1, spring)
     bg.add_bond(j1, damper)
-    # Run SCAP to assign causality across all bonds
+
+    # 1. Refine the graph with domain knowledge
+    refiner = DomainRefiner("domain_catalog.json")
+    refiner.refine_graph(bg, {
+        "I_Mass": (Domain.MECHANICAL_TRANSLATIONAL, "I"),
+        "C_Spring": (Domain.MECHANICAL_TRANSLATIONAL, "C"),
+        "R_Damper": (Domain.MECHANICAL_TRANSLATIONAL, "R"),
+        "SE_Force": (Domain.MECHANICAL_TRANSLATIONAL, "Se")
+    })
+
     drawBG(bg=bg, filename="mass_spring_damper", format="png", view=True)
     print_bond_table(bg)
 
     # 1. Export unassigned or partially assigned graph
     exportBG(bg, "mass_spring_damper.json")
     restored_bg = importBG("mass_spring_damper.json")
+    exportBG(restored_bg, "restored_mass_spring_damper.json")
     drawBG(bg=restored_bg, filename="restored_mass_spring_damper", format="png", view=True)
     print_bond_table(restored_bg)
