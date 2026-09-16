@@ -3,7 +3,6 @@ import numpy as np
 import csv
 import libsbml
 from networkx.readwrite import json_graph
-from pyvis.network import Network
 import webbrowser
 import os
 
@@ -417,7 +416,28 @@ def save_nxBG_html(G, filename='nx_BG.html'):
     browser.open(os.path.abspath(filename))
 
 
+def read_ParamCellML(sbml_file):
+    """
+    Read the parameter values from a CellML SBML file
 
+    Parameters
+    ----------
+    sbml_file : str
+        The file path of the CellML SBML file
+
+    Returns
+    -------
+    param_dict : dict
+        A dictionary of parameter names and their values
+
+    """
+    reader = libsbml.SBMLReader()
+    document = reader.readSBML(sbml_file)
+    model = document.getModel()
+    param_dict = {}
+    for parameter in model.getListOfParameters():
+        param_dict[parameter.getId()] = parameter.getValue()
+    return param_dict
     
         
     

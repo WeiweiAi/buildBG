@@ -90,6 +90,15 @@ class BGPhyQuantity:
     type: BGVariable = BGVariable.EFFORT
     physical_quantity: PhysicalQuantity | None = None
 
+@dataclass
+class Equation:
+    """Represents a single equation: y = f(x) with a description."""
+    dependent_symbol: str = ""
+    infix_rhs: str = ""
+    voi: str = "" # only for ode
+    expression: str = ""  # Could be a string for now, or a sympy.Expr in a real solver
+    description: str = ""
+
 @dataclass(eq=False)
 class Port:
     """Represents one typed connection point on a component."""
@@ -484,7 +493,7 @@ class BondGraph:
         # while retaining deterministic iteration order.
         self._bonds: dict[Bond, None] = {}
         self.physical_constants: set[BGPhyQuantity] | None = None # Global physical constants for the bond graph
-        self.equations: list[str] = [] # Store any equations for the bond graph
+        self.equations: list[Equation] | None = None # Store any equations for the bond graph
      
     @property
     def bonds(self):
@@ -784,6 +793,16 @@ def _pq_from_serializable(data: dict) -> PhysicalQuantity | None:
         return PhysicalQuantity(**data)
     return None
 
+def _eq_to_serializable(equation: Equation) -> dict:
+    """Converts an Equation dataclass to a dict, passing through other values unchanged."""
+    return asdict(equation) if is_dataclass(equation) else equation
+
+def _eq_from_serializable(data: dict) -> Equation | None:
+    """Reconstructs an Equation from an imported dict. 'expression' is required; the rest are optional."""
+    if isinstance(data, dict) and {"dependent_symbol", "infix_rhs", "voi", "expression"} .issubset(data.keys()):
+        return Equation(**data)
+    return None
+
 def exportBG(bg: BondGraph,json_file: str) -> None:
     """Serializes a BondGraph object and all state variables to a JSON string."""
     data = {
@@ -791,8 +810,8 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         "components": [],
         "bonds": []
     }
-    if len(bg.equations) > 0:
-        data["equations"] = bg.equations
+    if bg.equations is not None:
+        data["equations"] = [_eq_to_serializable(eq) for eq in bg.equations]
 
     if bg.physical_constants is not None:
         data["physical_constants"] = {}
@@ -857,7 +876,11 @@ def importBG(json_file: str) -> BondGraph:
         data = json.load(f)
     bg = BondGraph(name=data.get("name", "Imported_BG"))
     if "equations" in data:
-        bg.equations = data["equations"]
+        bg.equations = []
+        for eq in data["equations"]:
+            eq_obj = _eq_from_serializable(eq)
+            if eq_obj is not None:
+                bg.equations.append(eq_obj)
     if "physical_constants" in data:
         bg.physical_constants = set()
         for name, pq in data["physical_constants"].items():
