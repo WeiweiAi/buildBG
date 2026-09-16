@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG
+from defineBG import JUNCTIONS,BGVariable, Component, Port, Bond, ComponentType, ConnectionType, BondGraph,importBG,exportBG
 import sympy as sp
 
 @dataclass
@@ -579,6 +579,7 @@ class EquationBuilder:
                         description=eq.description
                     )
                 )
+                self.graph.equations.append(f"{new_lhs} = {new_rhs}")  # Store the translated equation in the graph's equations list
             except Exception as e:
                 print(f"Warning: Failed to translate equation '{eq.expression}'. Error: {e}")
                 translated_equations.append(eq) # Return untranslated on failure
@@ -604,3 +605,5 @@ if __name__ == "__main__":
     print("\nEquations with Physical Symbols:")
     for eq in equations_with_symbols:
         print("port_name:", eq.port_name, "variable:", eq.variable, "\n", "expression:", eq.expression, "\n","description:", eq.description)    
+
+    exportBG(bg, "mass_spring_damper_equations.json")      

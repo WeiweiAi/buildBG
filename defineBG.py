@@ -484,6 +484,7 @@ class BondGraph:
         # while retaining deterministic iteration order.
         self._bonds: dict[Bond, None] = {}
         self.physical_constants: set[BGPhyQuantity] | None = None # Global physical constants for the bond graph
+        self.equations: list[str] = [] # Store any equations for the bond graph
      
     @property
     def bonds(self):
@@ -705,7 +706,7 @@ class DomainRefiner:
             
         comp_metadata = domain_data.get("components", {}).get(template_id, {})
         port_domain_overrides = comp_metadata.get("port_domains", {})
-        multiports = len(component.ports) > 1      
+        multiports = (len(component.ports) > 1)      
         # 1. Map domain variables to ports (handling multi-domain overrides)
         for port_label, port in component.ports.items():
             # Check if this specific port has a designated domain in the JSON
@@ -726,13 +727,12 @@ class DomainRefiner:
             # Apply the variables via the @property setters
             for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
                 if var_key in domain_vars:
-                    if multiports and "symbol" in domain_vars[var_key]:
-                        domain_vars[var_key]["symbol"] = f"{domain_vars[var_key]["symbol"]}_{port.name.replace('.', '_')}"
-                    elif "symbol" in domain_vars[var_key]:
-                        domain_vars[var_key]["symbol"] = f"{domain_vars[var_key]["symbol"]}_{component.name}"
-                    else:
-                        pass  # If no symbol is provided, we leave it as is.
-                    pq = _pq_from_serializable((domain_vars[var_key]))
+                    # Copy before mutating so repeated calls don't keep appending to the shared catalog entry.
+                    var_data = dict(domain_vars[var_key])
+                    if "symbol" in var_data:
+                        suffix = port.name.replace('.', '_') if multiports else component.name
+                        var_data["symbol"] = f"{var_data['symbol']}_{suffix}"
+                    pq = _pq_from_serializable(var_data)
                     if pq is not None:
                         setattr(port, var_key, pq)
         # 2. Apply Equations & Parameters
@@ -742,6 +742,8 @@ class DomainRefiner:
                     component.add_constitutive_equation(eq)
             
             for p_name, p_data in comp_metadata.get("parameters", {}).items():
+                # Copy before mutating so repeated calls don't keep appending to the shared catalog entry.
+                p_data = dict(p_data)
                 if "symbol" in p_data:
                     p_data["symbol"] = f"{p_data['symbol']}_{component.name}"
                 pq = _pq_from_serializable(p_data)
@@ -777,9 +779,9 @@ def _pq_to_serializable(physical_quantity: PhysicalQuantity) -> dict:
     return asdict(physical_quantity) if is_dataclass(physical_quantity) else physical_quantity
 
 def _pq_from_serializable(data: dict) -> PhysicalQuantity | None:
-    """Reconstructs a PhysicalQuantity from an imported dict."""
-    if required_fields := {"description", "symbol", "units", "value"}.issubset(data.keys()):
-        return PhysicalQuantity(**data) if isinstance(data, dict) else None
+    """Reconstructs a PhysicalQuantity from an imported dict. 'value' is optional; the rest are required."""
+    if isinstance(data, dict) and {"description", "symbol", "units"}.issubset(data.keys()):
+        return PhysicalQuantity(**data)
     return None
 
 def exportBG(bg: BondGraph,json_file: str) -> None:
@@ -789,6 +791,9 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         "components": [],
         "bonds": []
     }
+    if len(bg.equations) > 0:
+        data["equations"] = bg.equations
+
     if bg.physical_constants is not None:
         data["physical_constants"] = {}
         for pq in bg.physical_constants:
@@ -851,7 +856,8 @@ def importBG(json_file: str) -> BondGraph:
     with open(json_file, "r") as f:
         data = json.load(f)
     bg = BondGraph(name=data.get("name", "Imported_BG"))
-
+    if "equations" in data:
+        bg.equations = data["equations"]
     if "physical_constants" in data:
         bg.physical_constants = set()
         for name, pq in data["physical_constants"].items():
@@ -931,6 +937,45 @@ def importBG(json_file: str) -> BondGraph:
 
     return bg
 
+def importBG_pq(bg: BondGraph, json_file: str) -> BondGraph:
+    """Imports only the physical quantities of a BondGraph from a JSON file, including constants,
+    component parameters, and port variables."""
+    with open(json_file, "r") as f:
+        data = json.load(f)
+
+    if "physical_constants" in data:
+        bg.physical_constants = set()
+        for name, pq in data["physical_constants"].items():
+            pq_obj = _pq_from_serializable(pq)
+            if pq_obj is not None:
+                bg.add_physical_constant(name, pq_obj)
+
+    for c_data in data.get("components", []):
+        comp = bg.components.get(c_data["name"])
+        if not comp:
+            warnings.warn(f"Component '{c_data['name']}' not found in bond graph; skipping parameter and port PQ import.")
+            continue
+        if "parameters" in c_data:
+            comp.parameters = set()
+            for name, pq in c_data["parameters"].items():
+                pq_obj = _pq_from_serializable(pq)
+                if pq_obj is not None:
+                    comp.add_parameter(name, pq_obj)
+        for p_data in c_data.get("ports", []):
+            label = p_data["label"]
+            if label not in comp.ports:
+                warnings.warn(f"Port '{label}' not found on component '{comp.name}'; skipping PQ import for this port.")
+                continue
+            else:
+                port = comp.ports[label]
+            for var_type in ["effort", "flow", "quantity", "momentum", "signal"]:
+                var_data = p_data.get(var_type)
+                if var_data:
+                    pq_obj = _pq_from_serializable(var_data)
+                    if pq_obj is not None:
+                        setattr(port, var_type, pq_obj)
+    return bg
+
 if __name__ == "__main__": 
     # Construct the system: Mass (I), Spring (C), Damper (R), Force Source (SE)
     bg = BondGraph("Mass_Spring_Damper")
@@ -959,3 +1004,5 @@ if __name__ == "__main__":
     exportBG(bg, "mass_spring_damper.json")
     restored_bg = importBG("mass_spring_damper.json")
     exportBG(restored_bg, "restored_mass_spring_damper.json")
+    imported_bg = importBG_pq(restored_bg, "mass_spring_damper.json")
+    exportBG(imported_bg, "imported_mass_spring_damper_pq.json")
