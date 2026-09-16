@@ -3,7 +3,7 @@ from enum import Enum, auto
 from dataclasses import asdict, dataclass, field, is_dataclass
 from collections import deque
 import warnings
-import graphviz
+import json
 
 # Define basic data structures for bond graph modeling, including components, ports, bonds, and the overall bond graph.
 class ComponentType(Enum):
@@ -65,7 +65,6 @@ class Domain(Enum):
     ELECTROCHEMICAL = auto()
     THERMAL = auto()
     CUSTOM = auto()
-
 @dataclass(frozen=True)
 class PhysicalQuantity:
     """Metadata for a domain-specific power variable."""
@@ -223,7 +222,6 @@ class Bond:
             raise ValueError(
                 f"Component '{component.name}' is not connected to this bond."
             )
-
 
     def validate_causality(self) -> bool:
         source = self.source.causality
@@ -707,7 +705,7 @@ class DomainRefiner:
             
         comp_metadata = domain_data.get("components", {}).get(template_id, {})
         port_domain_overrides = comp_metadata.get("port_domains", {})
-
+        multiports = len(component.ports) > 1      
         # 1. Map domain variables to ports (handling multi-domain overrides)
         for port_label, port in component.ports.items():
             # Check if this specific port has a designated domain in the JSON
@@ -725,13 +723,18 @@ class DomainRefiner:
                 # Fallback to the component's primary domain
                 port.domain = domain
                 domain_vars = domain_data.get("domain_variables", {})
-
             # Apply the variables via the @property setters
             for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
                 if var_key in domain_vars:
-                    pq = PhysicalQuantity(**domain_vars[var_key])
-                    setattr(port, var_key, pq)
-
+                    if multiports and "symbol" in domain_vars[var_key]:
+                        domain_vars[var_key]["symbol"] = f"{domain_vars[var_key]["symbol"]}_{port.name.replace('.', '_')}"
+                    elif "symbol" in domain_vars[var_key]:
+                        domain_vars[var_key]["symbol"] = f"{domain_vars[var_key]["symbol"]}_{component.name}"
+                    else:
+                        pass  # If no symbol is provided, we leave it as is.
+                    pq = _pq_from_serializable((domain_vars[var_key]))
+                    if pq is not None:
+                        setattr(port, var_key, pq)
         # 2. Apply Equations & Parameters
         if comp_metadata:
             for eq in comp_metadata.get("constitutive_equations", []):
@@ -739,7 +742,13 @@ class DomainRefiner:
                     component.add_constitutive_equation(eq)
             
             for p_name, p_data in comp_metadata.get("parameters", {}).items():
-                component.add_parameter(p_name, PhysicalQuantity(**p_data))
+                if "symbol" in p_data:
+                    p_data["symbol"] = f"{p_data['symbol']}_{component.name}"
+                pq = _pq_from_serializable(p_data)
+                if pq is not None:
+                    component.add_parameter(p_name, pq)
+                else:
+                    warnings.warn(f"Invalid physical quantity data for parameter '{p_name}' in component '{component.name}'.")
 
     def refine_graph(self, bg: BondGraph, refinement_map: dict[str, tuple[Domain, str]]) -> None:
         """Batch refines a whole graph and extracts global parameters."""
@@ -748,106 +757,20 @@ class DomainRefiner:
         for domain, _ in refinement_map.values():
             domain_data = self.catalog.get(domain.name, {})
             for g_name, g_data in domain_data.get("physical_constants", {}).items():
-                if g_name not in bg.physical_constants:
-                    bg.add_physical_constant(g_name, PhysicalQuantity(**g_data))
-    
+                if g_name not in bg.physical_constants:                    
+                    g_pq = _pq_from_serializable(g_data)
+                    if g_pq is not None:
+                        bg.add_physical_constant(g_name, g_pq)
+                    else:
+                        warnings.warn(f"Invalid physical quantity data for global constant '{g_name}' in domain '{domain.name}'.")
+                else:
+                    warnings.warn(f"Global constant '{g_name}' already exists in the bond graph; skipping duplicate.")
         # 2. Refine individual components
         for comp_name, (domain, template_id) in refinement_map.items():
             comp = bg.components.get(comp_name)
             if comp:
                 self.refine_component(comp, domain, template_id)
 
-def print_bond_table(bg: BondGraph) -> None:
-    """Prints a terminal representation of bonds and causality."""
-    print(f"\n--- Causality Summary: {bg.name} ---")
-    print(f"{'Bond':<8} | {'Source':<12} | {'Target':<15} | {'Causality'}")
-    print("-" * 60)
-
-    for i, b in enumerate(bg.bonds, 1):
-        src = b.source.component.name
-        tgt = b.target.component.name
-
-        if b.target.causality == True:
-            direction = f"{src} |-----> {tgt}"
-        elif b.source.causality == True:
-            direction = f"{src} <-----| {tgt}"
-        else:
-            direction = f"{src} ------- {tgt} (UNASSIGNED)"
-
-        print(f"Bond {i:<3} | {src:<12} | {tgt:<15} | {direction}")
-
-def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", view: bool = True) -> graphviz.Digraph:
-        """
-        Renders the Bond Graph from source --> target with formal causal strokes.
-        - Power flow arrow points from source to target.
-        - Causal stroke is drawn at the effort-receiving end.
-        """
-        dot = graphviz.Digraph(name=filename, comment="Bond Graph Visualization")
-        dot.attr(rankdir="LR", nodesep="0.6", ranksep="0.8")
-
-        # Clean textbook node styling (no bounding boxes)
-        dot.attr("node", shape="plaintext", fontname="Helvetica-Bold", fontsize="14")
-
-        # Render Component Nodes
-        for comp_name, comp in bg.components.items():
-            label=''
-            if comp.type in JUNCTIONS:
-                if comp.type == ComponentType.ONE:
-                    label = "1"
-                elif comp.type == ComponentType.ZERO:
-                    label = "0"
-                elif comp.type == ComponentType.XONE:
-                    label = "X1"
-                elif comp.type == ComponentType.XZERO:
-                    label = "X0"
-            else:
-                if isinstance(comp.type, ComponentType):
-                    label = f"{comp.type.name}: {comp_name}"
-                else:
-                    label = f"{comp.type}: {comp_name}"
-
-            dot.node(comp_name, label=label)
-
-        # Render Bonds (Source --> Target)
-        for i, bond in enumerate(bg.bonds):
-            src_comp = bond.source.component.name
-            tgt_comp = bond.target.component.name
-
-            # Always direct edges from source to target
-            dir_style = "forward"
-            power_arrow = "halfopen"
-
-            if bond.target.causality == True:
-                # Power arrow AND Causal stroke at target end
-                arrowhead = f"tee{power_arrow}"
-                arrowtail = "none"
-            elif bond.source.causality == True:
-                # Power arrow at target end, Causal stroke at source end
-                arrowhead = power_arrow
-                arrowtail = "tee"
-                dir_style = "both"
-            else:
-                # Unassigned causality (only power flow arrow)
-                arrowhead = power_arrow
-                arrowtail = "none"
-
-            dot.edge(
-                src_comp,
-                tgt_comp,
-                label=f" e{i+1}, f{i+1}",
-                fontname="Helvetica-Oblique",
-                fontsize="11",
-                dir=dir_style,
-                arrowhead=arrowhead,
-                arrowtail=arrowtail,
-                arrowsize="1.0",
-                penwidth="1.5"
-            )
-
-        dot.render(filename=filename, format=format, cleanup=True, view=view)
-        return dot
-
-import json
 
 def _pq_to_serializable(physical_quantity: PhysicalQuantity) -> dict:
     """Converts a PhysicalQuantity dataclass to a dict, passing through other values unchanged."""
@@ -855,7 +778,9 @@ def _pq_to_serializable(physical_quantity: PhysicalQuantity) -> dict:
 
 def _pq_from_serializable(data: dict) -> PhysicalQuantity | None:
     """Reconstructs a PhysicalQuantity from an imported dict."""
-    return PhysicalQuantity(**data) if isinstance(data, dict) else None
+    if required_fields := {"description", "symbol", "units", "value"}.issubset(data.keys()):
+        return PhysicalQuantity(**data) if isinstance(data, dict) else None
+    return None
 
 def exportBG(bg: BondGraph,json_file: str) -> None:
     """Serializes a BondGraph object and all state variables to a JSON string."""
@@ -1030,12 +955,7 @@ if __name__ == "__main__":
         "SE_Force": (Domain.MECHANICAL_TRANSLATIONAL, "Se")
     })
 
-    drawBG(bg=bg, filename="mass_spring_damper", format="png", view=True)
-    print_bond_table(bg)
-
     # 1. Export unassigned or partially assigned graph
     exportBG(bg, "mass_spring_damper.json")
     restored_bg = importBG("mass_spring_damper.json")
     exportBG(restored_bg, "restored_mass_spring_damper.json")
-    drawBG(bg=restored_bg, filename="restored_mass_spring_damper", format="png", view=True)
-    print_bond_table(restored_bg)

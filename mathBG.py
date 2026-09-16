@@ -540,7 +540,7 @@ class EquationBuilder:
                         # If a physical symbol was assigned via the DomainRefiner, use it
                         if hasattr(bg_var, 'physical_quantity') and bg_var.physical_quantity and bg_var.physical_quantity.symbol:
                             # Append the port name to ensure symbols are unique (e.g., u_comp_p1) replace comp.p1 dot with underscore
-                            sym = f"{bg_var.physical_quantity.symbol}_{port.name.replace('.', '_')}"
+                            sym = f"{bg_var.physical_quantity.symbol}"
                             id_to_symbol[sp.Symbol(bg_var.id)] = sp.Symbol(sym)
                         else:
                             # Fallback to the abstract ID if no physics are assigned
@@ -551,7 +551,7 @@ class EquationBuilder:
                 for pq in comp.parameters:
                     sym = pq.physical_quantity.symbol if pq.physical_quantity and pq.physical_quantity.symbol else pq.id
                     # Make parameter symbol unique to the component to avoid clashing
-                    id_to_symbol[sp.Symbol(pq.id)] = sp.Symbol(f"{sym}_{comp.name}")
+                    id_to_symbol[sp.Symbol(pq.id)] = sp.Symbol(f"{sym}")
                     
         # Map global parameters (like R, T, F)
         if hasattr(self.graph, 'physical_constants') and self.graph.physical_constants is not None:

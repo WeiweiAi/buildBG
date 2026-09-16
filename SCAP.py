@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, exportBG,importBG,drawBG
+from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, exportBG,importBG
 from collections import deque
 class SystemType(Enum):
     """Classifies a graph's resulting ordinary or differential-algebraic system."""
@@ -274,5 +274,4 @@ if __name__ == "__main__":
     system_type = scap_engine.run()
     exportBG(bg, 'mass_spring_damper_causality.json')  # Export the BondGraph to a JSON file
     print(f"System type: {system_type.name}")  
-    drawBG(bg=bg, filename="mass_spring_damper_causality", format="png", view=True)  # Visualize the BondGraph                   
     
