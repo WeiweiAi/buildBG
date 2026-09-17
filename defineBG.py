@@ -734,7 +734,15 @@ class DomainRefiner:
                 port.domain = domain
                 domain_vars = domain_data.get("domain_variables", {})
             # Apply the variables via the @property setters
-            for var_key in ["effort", "flow", "quantity", "momentum", "signal"]:
+            if component.type in (ComponentType.C, ComponentType.MC):
+                _vars =["effort", "flow","quantity","signal"]
+            elif component.type in (ComponentType.I, ComponentType.MI):
+                _vars =["effort", "flow","momentum","signal"]
+            elif component.type in (ComponentType.IC, ComponentType.MIC):
+                _vars =["effort", "flow","quantity","momentum","signal"]
+            else:
+                _vars = ["effort", "flow","signal"]
+            for var_key in _vars:
                 if var_key in domain_vars:
                     # Copy before mutating so repeated calls don't keep appending to the shared catalog entry.
                     var_data = dict(domain_vars[var_key])

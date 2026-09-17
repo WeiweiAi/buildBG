@@ -9,7 +9,7 @@
     "domain_variables": {
       "effort": {"description": "chemical potential", "units": "J_per_mol", "symbol": "mu"},
       "flow": {"description": "molar flow", "units": "fmol_per_s", "symbol": "v"},
-      "quantity": {"description": "molar quantity", "units": "fmol", "symbol": "q"}
+      "quantity": {"description": "molar quantity", "units": "fmol", "symbol": "q", "value": 0}
     },
     "components": {
       "Re": {
@@ -60,8 +60,8 @@
     "domain_variables": {
       "effort": {"description": "voltage", "units": "volt", "symbol": "u"},
       "flow": {"description": "current", "units": "fA", "symbol": "i"},
-      "quantity": {"description": "charge", "units": "fC", "symbol": "q"},
-      "momentum": {"description": "magnetic flux linkage", "units": "volt_s", "symbol": "p"}
+      "quantity": {"description": "charge", "units": "fC", "symbol": "q", "value": 0},
+      "momentum": {"description": "magnetic flux linkage", "units": "volt_s", "symbol": "p", "value": 0}
     },
     "components": {
       "R": {
@@ -113,8 +113,8 @@
     "domain_variables": {
       "effort": {"description": "force", "units": "J_per_um", "symbol": "F"},
       "flow": {"description": "velocity", "units": "um_per_s", "symbol": "v"},
-      "quantity": {"description": "displacement", "units": "um", "symbol": "x"},
-      "momentum": {"description": "momentum", "units": "J_s_per_um", "symbol": "p"}
+      "quantity": {"description": "displacement", "units": "um", "symbol": "x", "value": 0},
+      "momentum": {"description": "momentum", "units": "J_s_per_um", "symbol": "p", "value": 0}
     },
     "components": {
       "R": {
@@ -166,8 +166,8 @@
     "domain_variables": {
       "effort": {"description": "pressure", "units": "mmHg", "symbol": "P"},
       "flow": {"description": "volum flow", "units": "mL_per_s", "symbol": "Q"},
-      "quantity": {"description": "volume", "units": "mL", "symbol": "V"},
-      "momentum": {"description": "momentum of a flow tube", "units": "mmHg_mL2_per_s3", "symbol": "p"}
+      "quantity": {"description": "volume", "units": "mL", "symbol": "V", "value": 0},
+      "momentum": {"description": "momentum of a flow tube", "units": "mmHg_mL2_per_s3", "symbol": "p", "value": 0}
     },
     "components": {
       "R": {

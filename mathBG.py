@@ -34,7 +34,6 @@ class EquationBuilder:
         system_equations = []
         dependent_symbols = []
         junction_symbols = [] # Track all junction variables to eliminate them
-        port_symbol_map = {}
 
         # 1. Bond Continuity Equations
         for bond in self.graph.bonds:
