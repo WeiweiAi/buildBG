@@ -114,6 +114,109 @@ def kinetic2BGparams(N_f,N_r,kf,kr,Kc,Nc,Ws):
 
     return kappa[:,0], K[:,0], K_eq[:,0], diff_, zero_est,k_est
 
+def kinetic2BGparams_Gibbs(N_f,N_r,kf,kr,Kc,Nc,RT):
+    """
+    Convert kinetic parameters to BG parameters for biochemical reactions
+    The method is based on the thesis:
+    Pan, Michael. A bond graph approach to integrative biophysical modelling.
+    Diss. University of Melbourne, Parkville, Victoria, Australia, 2019.
+
+    Parameters
+    ----------
+    N_f : numpy.ndarray
+        The forward stoichiometry matrix
+    N_r : numpy.ndarray
+        The reverse stoichiometry matrix
+    kf : 1d list
+        The forward rate constants, the same order as the reactions in N_f  
+    kr : 1d list
+        The reverse rate constants, the same order as the reactions in N_r
+    Kc : 1d list, the constraints, can be empty
+    Nc : 2d list, can be empty, 
+        the length of the Nc is the number of Kc,
+        the length of the Nc[0] is the number of the species
+           
+    Returns
+    -------
+    mu_r : 1d numpy.ndarray
+        The apparent Gibbs free energy of the kappa, mu_r = RT ln(kappa)
+    G_o : 1d numpy.ndarray
+        The standard Gibbs free energy of the species, G_o = RT ln(K)
+    K_eq : numpy.ndarray
+        The equilibrium constants
+    diff_ : float
+        The difference between the estimated and the input kinetic parameters
+    zero_est : numpy.ndarray
+        The estimated zero values of the detailed balance constraints
+
+    """ 
+    k_f=np.array([kf]).transpose()
+    k_r=np.array([kr]).transpose()
+    K_c=np.array([Kc]).transpose()
+    N_c=np.array(Nc).transpose()
+    
+    N_fT=np.transpose(N_f)
+    N_rT=np.transpose(N_r)
+    N = N_r - N_f
+    num_cols = N_f.shape[1] # number of reactions, the same as the number of columns in N_f
+    num_rows = N_f.shape[0] # number of species, the same as the number of rows in N_f
+    I=np.identity(num_cols)
+    N_cT=np.transpose(N_c)
+    num_contraints = K_c.shape[0]
+    zerofill=np.zeros((num_contraints,num_cols))
+    K_eq = np.divide(k_f,k_r)
+    if len(K_c)!=0:
+        M=np.block([
+            [I, N_fT],
+            [I, N_rT],
+            [zerofill, N_cT]
+        ])
+        k= np.block([
+            [k_f],
+            [k_r],
+            [K_c]
+        ]) 
+        N_b =np.hstack([-N, N_c])
+        K_contraints = np.block([
+            [K_eq],
+            [K_c]
+        ])
+    else:
+        M=np.block([
+            [I, N_fT],
+            [I, N_rT]
+        ])
+        k= np.block([
+            [k_f],
+            [k_r]
+        ])
+        N_b = -N
+        K_contraints = K_eq
+
+    # convert kinetic parameters to BG parameters
+    mu= np.matmul(np.linalg.pinv(M),np.log(k)*RT)
+    mu_r=mu[:num_cols]
+    G_o = mu[num_cols:]
+    
+    # check if the solution is valid
+    N_rref, _ = Matrix(N).rref()
+    zero_est = None
+    R_mat = np.array(nsimplify(Matrix(-N), rational=True).nullspace())
+    if R_mat.size>0:
+        R_mat = np.transpose(np.array(R_mat).astype(np.float64))[0]
+        zero_est = np.matmul(R_mat.T,K_eq)
+    # Check that there is a detailed balance constraint
+    if N_c.size>0:
+        Z = np.array(nsimplify(Matrix(N_c), rational=True).nullspace()) #rational_nullspace(M, 2)
+        if Z.size>0:
+            Z = np.transpose(np.array(Z).astype(np.float64))[0]
+            zero_est = np.matmul(Z.T,np.log(K_c))
+
+    k_est = np.exp(np.matmul(M,mu/RT))
+    diff_ = np.sum(np.abs(np.divide(k_est - k,k)))
+
+    return mu_r[:,0], G_o[:,0], K_eq[:,0], diff_, zero_est,k_est
+
 def BGparams2kinetic(N_f,N_r,kappa,K,Ws):
     """
     Convert the BG parameters to the kinetic parameters
@@ -228,7 +331,76 @@ def kinetic2BGparams_csvs(Kc,Nc,Ws,eName, fName, N_f, N_r, kinetic_params_csv='k
     k_df_new.index = [i+1 for i in range(len(k_f))]
     new_csv_file = kinetic_params_csv.split('.csv')[0] + '_new.csv'
     k_df_new.to_csv(new_csv_file, index_label='Reaction')
-     
+
+def kinetic2BGparams_Gibbs_csvs(Kc,Nc,Ws,eName, fName, N_f, N_r, kinetic_params_csv='kinetic_params.csv',bg_params_csv='bg_params.csv'):
+    """
+    Convert the BG parameters to the kinetic parameters
+
+    Parameters
+    ----------
+    Kc : 1d list, the constraints, can be empty
+        The constraints, can be empty
+    Nc : 2d list, can be empty, 
+        the length of the Nc is the number of Kc,
+        the length of the Nc[0] is the number of the species
+    Ws : 1d list, the size is the number of species
+    eName : 1d list, the size is the number of species
+    fName : 1d list, the size is the number of reactions
+    N_f: 2d numpy.ndarray
+        The forward stoichiometry matrix
+    N_r: 2d numpy.ndarray
+        The reverse stoichiometry matrix
+    kinetic_params_csv : str, optional
+        The file path of the kinetic parameters csv file
+        The default is 'kinetic_params.csv'.
+    bg_params_csv : str, optional
+        The file path of the bg parameters csv file
+        The default is 'bg_params.csv'.
+
+    returns
+    -------
+    None
+
+    side effect
+    ------------
+    Save the bg parameters to a csv file
+    Save the estimated kinetic parameters to a new csv file            
+    """
+    
+    # check if the number of species is the same as the number of rows in the forward stoichiometry matrix
+    if len(Ws)!=N_f.shape[0]:
+        raise ValueError('The number of species in the volume csv file is not the same as the number of rows in the forward stoichiometry matrix')
+    pdf_k= pd.read_csv(kinetic_params_csv,index_col=0)
+    k_f=pdf_k['k_f'].to_numpy().flatten()
+    k_r=pdf_k['k_r'].to_numpy().flatten()
+    # the number of reactions is the same as the number of columns in the forward stoichiometry matrix
+    if len(k_f)!=N_f.shape[1]:
+        raise ValueError('The number of reactions in the kinetic parameters csv file is not the same as the number of columns in the forward stoichiometry matrix')
+    if len(k_r)!=N_r.shape[1]:
+        raise ValueError('The number of reactions in the kinetic parameters csv file is not the same as the number of columns in the reverse stoichiometry matrix')
+    mu_r, G_o, K_eq, diff_, zero_est,k_est= kinetic2BGparams_Gibbs(N_f,N_r,k_f,k_r,Kc,Nc,RT=1)
+    print('zero_est:',zero_est)
+    print('diff:',diff_)
+    bg_dict = {}
+    # create a dictionary for the bg parameters
+    for i in range(len(mu_r)):
+        key=f'mu_{fName[i]}'
+        bg_dict[key] = mu_r[i]
+    for i in range(len(G_o)):
+        key=f'G_{eName[i]}'
+        bg_dict[key] = G_o[i]
+    # save the dictionary to a csv file
+    pd.DataFrame.from_dict(bg_dict, orient='index').to_csv(bg_params_csv, header=False)
+    # save the recalculated k_est parameters to a csv file
+    k_est=k_est.flatten()
+    num_k=len(k_est)-len(Kc)
+    k_dict_new={'k_f':k_est[:int(num_k/2)],'k_r':k_est[int(num_k/2):num_k]}
+    k_df_new=pd.DataFrame(data=k_dict_new)
+    # index starts from 1
+    k_df_new.index = [i+1 for i in range(len(k_f))]
+    new_csv_file = kinetic_params_csv.split('.csv')[0] + '_new.csv'
+    k_df_new.to_csv(new_csv_file, index_label='Reaction')
+
 def BGparams2kinetic_csvs(Ws,eName,fName, N_f, N_r,bg_params_csv='bg_params.csv',kinetic_params_csv='kinetic_params.csv'):
     """
     Convert the BG parameters to the kinetic parameters
