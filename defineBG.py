@@ -290,7 +290,7 @@ class Bond:
         return True # Successfully assigned causality to the specified port; the other port's causality will be the opposite.
         
     @staticmethod
-    def validate(source: Port, target: Port, connection_type: ConnectionType = ConnectionType.POWER_BOND) -> None:
+    def validate(source: Port, target: Port, type: ConnectionType = ConnectionType.POWER_BOND) -> None:
 
         if source is target:
             raise ValueError(f"Cannot create a bond from port '{source.name}' to itself.")
@@ -304,7 +304,7 @@ class Bond:
         if target.bond is not None:
             raise ValueError(f"Target port {target.name} is already connected to a bond.")
 
-        if connection_type == ConnectionType.POWER_BOND:
+        if type == ConnectionType.POWER_BOND:
            
             if source.type is not PortType.POWER_PORT:
                 raise ValueError( f"Source port {source.name} is not a valid power port.")
@@ -313,7 +313,7 @@ class Bond:
                 raise ValueError(
                     f"Target port {target.name} is not a valid power port."
                 )
-        elif connection_type == ConnectionType.SIGNAL_BOND:
+        elif type == ConnectionType.SIGNAL_BOND:
             if source.type is not PortType.SIGNAL_PORT:
                 raise ValueError( f"Source port {source.name} is not a valid signal port.")
 
@@ -336,7 +336,7 @@ class Component:
     num_signal_ports: int = 0 # Number of signal ports for ComponentType.CUSTOM and Block Diagram elements, must be >= 0
     ports: dict[str, Port] = field(default_factory=dict, repr=False, init=False)
     _available_ports: deque[Port] = field(default_factory=deque, repr=False,   init=False) # track which ports are available for new bonds  
-    _next_port_number: int = field(default=1, repr=False, init=False) # only used for junctions, to auto-label new ports
+    _next_port_number: int = field(default=1, repr=False, init=False) # to auto-label new ports
     bonds: set[Bond] = field(default_factory=set, repr=False, init=False) # register all bonds connected to this component, for quick lookup and deletion 
     constitutive_equations: list[str] = field(default_factory=list, repr=False, init=False) # store any constitutive equations for this component
     parameters: set[BGPhyQuantity] | None = field(default=None, repr=False, init=False) # store any parameters for this component
@@ -346,52 +346,53 @@ class Component:
         # 1-Port Elements
         if self.type in (ComponentType.R, ComponentType.SE, ComponentType.SF,ComponentType.C,ComponentType.I):
             storageType = StorageType.C_TYPE if self.type == ComponentType.C else StorageType.I_TYPE if self.type == ComponentType.I else None
-            p1=self._add_port("p1",storage=storageType)
+            p1=self._add_port("1",storage=storageType)
             self._available_ports.append(p1) # For 1-port elements, the single port is always available for bonding
         # 2-Port Elements
         elif self.type in (ComponentType.TF, ComponentType.GY,ComponentType.IC):
             storageType = StorageType.C_TYPE if self.type == ComponentType.IC else None
-            p1=self._add_port("p1",storage=storageType)
+            p1=self._add_port("1",storage=storageType)
             storageType = StorageType.I_TYPE if self.type == ComponentType.IC else None
-            p2=self._add_port("p2",storage=storageType)
+            p2=self._add_port("2",storage=storageType)
             self._available_ports.extend([p1, p2])
         elif self.type in (ComponentType.MSE, ComponentType.MSF,ComponentType.MC, ComponentType.MI):
             storageType = StorageType.C_TYPE if self.type == ComponentType.MC else StorageType.I_TYPE if self.type == ComponentType.MI else None
-            p1=self._add_port("p1",storage=storageType)
-            p2=self._add_port("mod", type=PortType.SIGNAL_PORT)
+            p1=self._add_port("1",storage=storageType)
+            p2=self._add_port("2", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2])
         # Reaction Elements
         elif self.type == ComponentType.Re:
-            p1=self._add_port("p1",fixed_causality=True)
-            p2=self._add_port("p2", fixed_causality=True)
+            p1=self._add_port("1",fixed_causality=True)
+            p2=self._add_port("2", fixed_causality=True)
             self._available_ports.extend([p1, p2])
             self.non_invertible = True # Reactions are generally non-invertible due to their nonlinear constitutive relationships
         # 3-Port Elements
         elif self.type in (ComponentType.MIC,ComponentType.MTF, ComponentType.MGY):
-            p1=self._add_port("p1")
-            p2=self._add_port("p2")
-            p3=self._add_port("mod", type=PortType.SIGNAL_PORT)
+            p1=self._add_port("1")
+            p2=self._add_port("2")
+            p3=self._add_port("3", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
         elif self.type == ComponentType.Re_GHK:
-            p1=self._add_port("p1", fixed_causality=True)
-            p2=self._add_port("p2", fixed_causality=True)
-            p3=self._add_port("mod", type=PortType.SIGNAL_PORT)
+            p1=self._add_port("1", fixed_causality=True)
+            p2=self._add_port("2", fixed_causality=True)
+            p3=self._add_port("3", type=PortType.SIGNAL_PORT)
             self._available_ports.extend([p1, p2, p3])
             self.non_invertible = True # Modulated storage elements are generally non-invertible due to their nonlinear constitutive relationships
         elif self.type in (ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO, ComponentType.XONE):
             pass # Junctions dynamically allocate ports as needed; no default ports are created.
         elif self.type == ComponentType.BLOCK:
             for i in range(1, self.num_signal_ports + 1):
-                p = self._add_port(f"s{i}", type=PortType.SIGNAL_PORT)
+                p = self._add_port(f"{i}", type=PortType.SIGNAL_PORT)
                 self._available_ports.append(p)
         else: # type == ComponentType.CUSTOM or any other unrecognized type 
             # For custom components, create the specified number of power and signal ports
             for i in range(1, self.num_power_ports + 1):
-                p = self._add_port(f"p{i}", type=PortType.POWER_PORT)
+                p = self._add_port(f"{i}", type=PortType.POWER_PORT)
                 self._available_ports.append(p)
             for i in range(1, self.num_signal_ports + 1):
-                p = self._add_port(f"s{i}", type=PortType.SIGNAL_PORT)
+                p = self._add_port(f"{i+self.num_power_ports}", type=PortType.SIGNAL_PORT)
                 self._available_ports.append(p)
+        self._next_port_number = len(self.ports) + 1 # Initialize the next port number based on the current number of ports
 
     @property
     def port_count(self) -> int:
@@ -443,17 +444,13 @@ class Component:
         else:
             warnings.warn(f"Port '{port.name}' is already marked as held.");
     
-    def get_or_create_port(self) -> Port:
-        # This method is only relevant for junctions (0, 1, X0, X1). It creates a new one port.
-        if self.type in JUNCTIONS:
-            if self._available_ports:
-                return self._available_ports[0]  # Return the first available free port
-            else: # Create a new one.
-                label = f"p{self._next_port_number}" 
-                self._next_port_number += 1
-                port = self._add_port(label)
-                self._available_ports.append(port)  # Mark the new port as available for bonding              
-                return port
+    def get_or_create_port(self,type: PortType = PortType.POWER_PORT) -> Port|None:    
+        if (self.type in JUNCTIONS and type==PortType.POWER_PORT) or (self.type not in JUNCTIONS and type==PortType.SIGNAL_PORT): # allow any junction to create a new power port if requested.
+            label = f"{self._next_port_number}" 
+            self._next_port_number += 1
+            port = self._add_port(label, type=type)
+            self._available_ports.append(port)  # Mark the new port as available for bonding              
+            return port
         else:
             raise ValueError(
                 f"Component '{self.name}' of type '{self.type}' does not support dynamic port allocation."
@@ -534,45 +531,55 @@ class BondGraph:
         self.components[comp_obj.name] = comp_obj
         return comp_obj
 
-    def _resolve_endpoint(self, arg: Port | Component | str) -> Port | None:
+    def _resolve_endpoint(self, arg: Port | Component | str, type: PortType = PortType.POWER_PORT) -> Port | None:
         """Resolves a Port, Component, or String input into a valid Port object before adding a bond."""
-        if isinstance(arg, Port):
+        if isinstance(arg, Port) and arg.type == type:
             return arg
         elif isinstance(arg, Component):
             available_ports = arg.get_available_ports()
-            if len(available_ports) == 1:
+            if len(available_ports) == 1 and available_ports[0].type == type:
                 return available_ports[0]  # Return the first available free port
-            else:
+            elif len(available_ports) ==0:
                 # For junctions, allocate a free port or create a new one
-                if arg.type in JUNCTIONS:
-                    return arg.get_or_create_port()  # Dynamically allocate a new port if none are free
-                else:
-                    warnings.warn(f"Component '{arg.name}' has {len(available_ports)} free ports, please specify which one to use.")
+                try:
+                    new_port = arg.get_or_create_port(type=type)  # Dynamically allocate a new port if none are free
+                    return new_port
+                except Exception as e:
+                    warnings.warn(f"Failed to allocate a new port for component '{arg.name}': {e}")
                     return None
+            else:
+                warnings.warn(f"Cannot resolve component '{arg.name}' to a unique available port of type '{type.name}'.")
+                return None
         elif isinstance(arg, str):
             resolved = self._resolve_string(arg)
-            if isinstance(resolved, Port):
+            if isinstance(resolved, Port) and resolved.type == type:
                 return resolved
             elif isinstance(resolved, Component):
-                return self._resolve_endpoint(resolved)  # Recursively resolve the component to a port
+                return self._resolve_endpoint(resolved, type=type)  # Recursively resolve the component to a port
             else:
                 warnings.warn(f"Could not resolve '{arg}' to a valid port or component.")
                 return None
         else:
-            warnings.warn(f"Invalid argument type: {type(arg)}. Expected Port, Component, or str.")
+            warnings.warn(f"Invalid argument type:. Expected Port, Component, or str.")
             return None
    
-    def add_bond(self, source: Component | Port | str, target: Component | Port | str, **kwargs) -> Bond | None:
+    def add_bond(self, source: Component | Port | str, target: Component | Port | str,  type: ConnectionType = ConnectionType.POWER_BOND,**kwargs) -> Bond | None:
         """Creates a bond between two endpoints."""
-        src_port = self._resolve_endpoint(source)
-        tgt_port = self._resolve_endpoint(target)     
+        if type not in ConnectionType:
+            raise ValueError(f"Invalid connection type: {type}. Must be a member of ConnectionType Enum.")
+        if type == ConnectionType.POWER_BOND:
+            port_type = PortType.POWER_PORT
+        elif type == ConnectionType.SIGNAL_BOND:
+            port_type = PortType.SIGNAL_PORT
+        src_port = self._resolve_endpoint(source, type=port_type)
+        tgt_port = self._resolve_endpoint(target, type=port_type)     
         if src_port is not None and tgt_port is not None:
             try:
-                Bond.validate(src_port, tgt_port, kwargs.get('connection_type', ConnectionType.POWER_BOND))
+                Bond.validate(src_port, tgt_port, type=type)
             except ValueError as e:
                 warnings.warn(f"Failed to create bond: {e}")
                 return None            
-            bond = Bond(source=src_port, target=tgt_port, **kwargs)
+            bond = Bond(source=src_port, target=tgt_port,type=type)
             self._bonds[bond] = None   
             return bond          
         else:

@@ -1,5 +1,5 @@
 import graphviz
-from defineBG import BondGraph, ComponentType, JUNCTIONS
+from defineBG import BondGraph, ComponentType, JUNCTIONS, ConnectionType
 
 def print_bond_table(bg: BondGraph) -> None:
     """Prints a terminal representation of bonds and causality."""
@@ -60,25 +60,33 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
             # Always direct edges from source to target
             dir_style = "forward"
             power_arrow = "halfopen"
+            signal_arrow = "normal"
 
-            if bond.target.causality == True:
+            if bond.target.causality == True and bond.type == ConnectionType.POWER_BOND:
                 # Power arrow AND Causal stroke at target end
                 arrowhead = f"tee{power_arrow}"
                 arrowtail = "none"
-            elif bond.source.causality == True:
+            elif bond.source.causality == True and bond.type == ConnectionType.POWER_BOND:
                 # Power arrow at target end, Causal stroke at source end
                 arrowhead = power_arrow
                 arrowtail = "tee"
                 dir_style = "both"
-            else:
+            elif bond.type == ConnectionType.POWER_BOND:
                 # Unassigned causality (only power flow arrow)
                 arrowhead = power_arrow
                 arrowtail = "none"
-
+            else:
+                # Signal bond (normal arrow)
+                arrowhead = signal_arrow
+                arrowtail = "none"
+            if bond.type == ConnectionType.SIGNAL_BOND:
+                label = f"s{i+1}"
+            else:
+                label = f"e{i+1}, f{i+1}"
             dot.edge(
                 src_comp,
                 tgt_comp,
-                label=f" e{i+1}, f{i+1}",
+                label=label,
                 fontname="Helvetica-Oblique",
                 fontsize="11",
                 dir=dir_style,
