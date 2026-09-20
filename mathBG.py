@@ -1,8 +1,11 @@
 from defineBG import JUNCTIONS, Component, Port, Bond, ComponentType, ConnectionType, BondGraph, Equation, importBG,exportBG
 import sympy as sp
+
+# SymPy is used for symbolic elimination while Equation remains the public model type.
 class EquationBuilder:
     """Mathematical model generation."""
     def __init__(self, graph: BondGraph):
+        """Creates an equation generator attached to a bond graph."""
         self.graph = graph
 
     def _get_port_for_component(
@@ -10,6 +13,7 @@ class EquationBuilder:
             bond: Bond,
             component: Component,
         ) -> Port:
+            """Returns the endpoint belonging to `component`, or raises on a mismatch."""
             if bond.source.component is component:
                 return bond.source
 
@@ -138,6 +142,7 @@ class EquationBuilder:
         return equations
 
     def _process_ode_expression(self, expr: sp.Expr) -> Equation | None:
+        """Extracts and solves an `ode(state, time)` term from a SymPy expression."""
         ode_func = sp.Function('ode')
         found_odes = expr.find(ode_func)
 

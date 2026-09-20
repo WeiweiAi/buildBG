@@ -1,8 +1,9 @@
 import graphviz
 from defineBG import BondGraph, ComponentType, JUNCTIONS, ConnectionType
 
+# Console and Graphviz renderers for inspecting a bond graph after construction.
 def print_bond_table(bg: BondGraph) -> None:
-    """Prints a terminal representation of bonds and causality."""
+    """Prints each bond's endpoints and causal direction for quick inspection."""
     print(f"\n--- Causality Summary: {bg.name} ---")
     print(f"{'Bond':<8} | {'Source':<12} | {'Target':<15} | {'Causality'}")
     print("-" * 60)
@@ -22,9 +23,12 @@ def print_bond_table(bg: BondGraph) -> None:
 
 def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", view: bool = True) -> graphviz.Digraph:
         """
-        Renders the Bond Graph from source --> target with formal causal strokes.
+    Renders the bond graph from source to target with formal causal strokes.
         - Power flow arrow points from source to target.
         - Causal stroke is drawn at the effort-receiving end.
+
+    The rendered file is written through Graphviz; the returned graph is
+    also available to callers that want to inspect or render it again.
         """
         dot = graphviz.Digraph(name=filename, comment="Bond Graph Visualization")
         dot.attr(rankdir="LR", nodesep="0.6", ranksep="0.8")

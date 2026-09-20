@@ -8,6 +8,7 @@ CellMLV1_namespaces = {
         'xlink': "http://www.w3.org/1999/xlink",  # XLink namespace
         'math': "http://www.w3.org/1998/Math/MathML"  # MathML namespace
     }
+# SI unit names understood directly by CellML; other units are imported below.
 defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","farad","gram","gray","henry",
     "hertz","joule","katal","kelvin","kilogram","liter","litre","lumen","lux","meter","metre","mole",
     "newton","ohm","pascal","radian","second","siemens","sievert","steradian","tesla","volt","watt","weber"]
@@ -15,12 +16,16 @@ defUnit=["ampere","becquerel","candela","celsius","coulomb","dimensionless","far
 # modified from https://github.com/CellDL/bondgraph-tools/blob/main/bondgraph/bondgraph/cellml/__init__.py
 
 def cellml_element(tag: str, *args, **attributes) -> ET.Element:
+    """Creates an XML element through the shared CellML element factory."""
     return ET.Element(tag, *args, **attributes)
 
 def cellml_subelement(parent: ET.Element, tag: str, *args, **attributes) -> ET.Element:
+    """Creates and attaches a child XML element to a CellML parent."""
     return ET.SubElement(parent, tag, *args, **attributes)
 class CellMLVariable:    
+    """Stores CellML variable metadata and renders it as a `<variable>` element."""
     def __init__(self, name: str, units: str):
+        """Initializes a variable with its required name and units attributes."""
         self.__name = name
         self.__units = units
         self._public_interface = None
@@ -28,13 +33,17 @@ class CellMLVariable:
         self.__initial_value = None
 
     def set_initial_value(self, value: str | None):
+        """Sets or clears the optional CellML initial value."""
         self.__initial_value = value
     def set_public_interface(self, public_interface: str | None):
+        """Sets or clears the variable's public interface declaration."""
         self._public_interface = public_interface
     def set_private_interface(self, private_interface: str | None):
+        """Sets or clears the variable's private interface declaration."""
         self._private_interface = private_interface
 
     def get_element(self) -> ET.Element:
+        """Builds an XML variable element from the current metadata."""
         element = cellml_element('variable', name=self.__name, units=self.__units)
         if self.__initial_value is not None:
             element.attrib['initial_value'] = f'{self.__initial_value}'
@@ -46,23 +55,23 @@ class CellMLVariable:
 
     @property
     def name(self):
-    #==============
+        """Returns the CellML variable name."""
         return self.__name
     @property
     def units(self):
-    #==============
+        """Returns the CellML units reference."""
         return self.__units
     @property
     def initial_value(self):
-    #==============
+        """Returns the optional serialized initial value."""
         return self.__initial_value
     @property
     def public_interface(self):
-    #==============
+        """Returns the optional public interface mode."""
         return self._public_interface
     @property
     def private_interface(self):
-    #==============
+        """Returns the optional private interface mode."""
         return self._private_interface
 
 
@@ -146,6 +155,7 @@ def read_cellmlV1 (model_file):
     model = ET.parse(model_file).getroot()
     # Remove the 'cellml' namespace prefix from element tags
     def remove_namespace_prefix(element, prefix):
+        """Recursively removes one namespace URI from an XML element tree."""
         if element.tag.startswith(f'{{{CellMLV1_namespaces[prefix]}}}'):
             element.tag = element.tag.replace(f'{{{CellMLV1_namespaces[prefix]}}}', '')
         for child in element:
@@ -187,13 +197,14 @@ def units_import(model_ET, units_Set,units_file):
 
 
 def pq2CellMLVariable(pq: PhysicalQuantity) -> CellMLVariable:
-    """Convert a PhysicalQuantity to a CellMLVariable."""
+    """Converts domain quantity metadata into a CellML variable definition."""
     cellml_var = CellMLVariable(pq.symbol, pq.units)
     if pq.value is not None:
         cellml_var.set_initial_value(str(pq.value))    
     return cellml_var
 
 def BG2CellMLV1(bg: BondGraph):
+    """Builds a CellML V1 model containing graph variables, parameters, and equations."""
 
     module_name = bg.name
     params = []

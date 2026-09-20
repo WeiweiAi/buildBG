@@ -1,6 +1,8 @@
 from enum import Enum, auto
 from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, ConnectionType, exportBG,importBG
 from collections import deque
+
+# System classifications returned after causality assignment completes.
 class SystemType(Enum):
     """Classifies a graph's resulting ordinary or differential-algebraic system."""
     ODE = auto()
@@ -10,6 +12,7 @@ class SystemType(Enum):
 class SCAPEngine:
     """Sequential Causality Assignment Procedure."""
     def __init__(self, graph: BondGraph):
+        """Creates a causality solver that operates directly on `graph`."""
         self.graph = graph
 
     def _get_bond_effort_direction(self, bond: Bond, component: Component) -> str | None:
@@ -164,7 +167,7 @@ class SCAPEngine:
         return SystemType.ODE
     
     def run(self) -> SystemType:
-        """Executes the Generalized Extended SCAP framework."""
+        """Assigns all power-bond causalities and classifies the resulting system."""
 
         for comp in self.graph.components.values():
             for port in comp.ports.values():

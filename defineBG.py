@@ -40,6 +40,7 @@ class ComponentType(Enum):
     # User-defined / Custom
     CUSTOM = auto() # User-defined component   
 
+# Component groups used by causality assignment, equation generation, and refinement.
 JUNCTIONS = {ComponentType.ZERO, ComponentType.ONE, ComponentType.XZERO,  ComponentType.XONE }
 TRANSDUCERS = {ComponentType.TF, ComponentType.GY, ComponentType.MTF, ComponentType.MGY }
 
@@ -52,6 +53,7 @@ class PortType(Enum):
     POWER_PORT = auto() # Port for power exchange (effort and flow)
     SIGNAL_PORT = auto() # Port for signal interface (control signals)
 class StorageType(Enum):
+    """Identifies which state variable a storage port integrates."""
     C_TYPE = auto() # Port for C-type storage (integrates flow to quantity), is a power port
     I_TYPE = auto() # Port for I-type storage (integrates effort to momentum), is a power port
 class Domain(Enum):
@@ -233,6 +235,7 @@ class Bond:
             )
 
     def validate_causality(self) -> bool:
+        """Checks that a power bond has exactly one effort-receiving endpoint."""
         source = self.source.causality
         target = self.target.causality
         if self.type == ConnectionType.SIGNAL_BOND:
@@ -255,6 +258,7 @@ class Bond:
         return True
     
     def has_causality_conflict(self) -> bool | None:
+        """Reports whether assigned endpoint causalities violate bond polarity."""
         if self.source.causality is None or self.target.causality is None:
             return None # Causality is unassigned for at least one port
         return self.source.causality == self.target.causality
@@ -292,6 +296,7 @@ class Bond:
         
     @staticmethod
     def validate(source: Port, target: Port, type: ConnectionType = ConnectionType.POWER_BOND) -> None:
+        """Validates endpoint identity, occupancy, and port-type compatibility."""
 
         if source is target:
             raise ValueError(f"Cannot create a bond from port '{source.name}' to itself.")
@@ -401,6 +406,7 @@ class Component:
         return len(self.ports)
 
     def _add_port(self, label: str, **kwargs) -> Port:
+        """Creates and registers a uniquely labelled port on this component."""
         if label in self.ports: # uniqueness check for port labels
             raise ValueError(f"Port '{label}' already exists on component '{self.name}'.")       
         new_port = Port(label=label, component=self, **kwargs)
@@ -418,6 +424,7 @@ class Component:
         self.constitutive_equations.append(equation)
 
     def release_port(self, port: Port) -> None:
+        """Marks an unconnected port as available for a future bond."""
         if port.bond is not None:
             raise ValueError(
                 f"Cannot release connected port '{port.name}'."
@@ -432,6 +439,7 @@ class Component:
             warnings.warn(f"Port '{port.name}' is already marked as available."); 
 
     def hold_port(self, port: Port) -> None:
+        """Removes a connected port from the available-port queue."""
         if port.bond is None:
             raise ValueError(
                 f"Cannot hold unconnected port '{port.name}'."
@@ -446,6 +454,7 @@ class Component:
             warnings.warn(f"Port '{port.name}' is already marked as held.");
     
     def get_or_create_port(self,type: PortType = PortType.POWER_PORT) -> Port|None:    
+        """Allocates a new dynamic port for junctions or signal components."""
         if (self.type in JUNCTIONS and type==PortType.POWER_PORT) or (self.type not in JUNCTIONS and type==PortType.SIGNAL_PORT): # allow any junction to create a new power port if requested.
             label = f"{self._next_port_number}" 
             self._next_port_number += 1
@@ -481,7 +490,7 @@ class Component:
             )
         self.non_invertible = True # Mark the component as non-invertible if a fixed causality is set on any port
 class BondGraph:
-    """Owns a connected set of components"""
+    """Owns components, bonds, global constants, and generated equations."""
 
     def __init__(self, name: str = "bond_graph") -> None:
         """Initializes an empty named graph."""
@@ -499,7 +508,7 @@ class BondGraph:
         return self._bonds.keys()
 
     def _resolve_string(self, arg: str) -> Port | Component |None:
-        """Resolves a String input into a valid Port object """
+        """Resolves `component.port` or component names against graph registries."""
         if "." in arg:
             comp_name, port_label = arg.split(".", 1)
             comp = self.components.get(comp_name)
@@ -517,7 +526,7 @@ class BondGraph:
                 return None
 
     def add_component(self, component: Component | str, **kwargs) -> Component:
-        """Adds a component to internal tracking."""
+        """Registers an existing component or constructs one from a name and options."""
         if isinstance(component, str):
             if component in self.components:
                 raise ValueError(f"Component '{component}' already exists.")
@@ -588,7 +597,7 @@ class BondGraph:
             return None
        
     def _get_bonds_for_component(self, comp_arg: Component | str) -> set[Bond]:
-        """Returns all bonds connected to a given component."""
+        """Returns the component-owned bond set, resolving names when necessary."""
         comp_name = comp_arg.name if isinstance(comp_arg, Component) else comp_arg
         comp = self.components.get(comp_name)
         if not comp:
@@ -598,7 +607,7 @@ class BondGraph:
             return comp.bonds
     
     def _resolve_to_port(self, arg: Port | str) -> Port | None:
-        """Resolves a Port, or String input into a valid Port object before deleting a bond."""
+        """Resolves a port object or `component.port` string for bond deletion."""
         if isinstance(arg, Port):
             return arg
         
@@ -616,7 +625,7 @@ class BondGraph:
         return None
     
     def delete_bond(self, arg1: Bond | Port | Component | str, arg2: Port | Component | str | None = None) -> int:
-        """Deletes bonds based on flexible inputs."""
+        """Deletes one bond or all bonds shared by the supplied endpoints."""
         bonds_to_delete: list[Bond] = []
         
         if arg2 is None:
@@ -686,7 +695,7 @@ class BondGraph:
             warnings.warn(str(e))
 
     def set_domain(self, arg: Component| Port| str, domain_value: Domain | str) -> None:
-        """Sets the domain for a specific component."""
+        """Assigns physical-domain metadata to a resolved component or port."""
         if isinstance(arg, Component):
             arg.domain = domain_value
         elif isinstance(arg, Port):
@@ -710,6 +719,7 @@ class DomainRefiner:
     """Decorates abstract Bond Graph components with physical domain knowledge."""
     
     def __init__(self, catalog_path: str) -> None:
+        """Loads the JSON catalog used to decorate abstract graph elements."""
         with open(catalog_path, 'r') as f:
             self.catalog = json.load(f)
 
@@ -778,7 +788,7 @@ class DomainRefiner:
                     warnings.warn(f"Invalid physical quantity data for parameter '{p_name}' in component '{component.name}'.")
 
     def refine_graph(self, bg: BondGraph, refinement_map: dict[str, tuple[Domain, str]]) -> None:
-        """Batch refines a whole graph and extracts global parameters."""
+        """Adds domain constants, then applies templates to named graph components."""
     
         # 1. Apply global parameters to the graph first
         for domain, _ in refinement_map.values():
@@ -822,7 +832,7 @@ def _eq_from_serializable(data: dict) -> Equation | None:
     return None
 
 def exportBG(bg: BondGraph,json_file: str) -> None:
-    """Serializes a BondGraph object and all state variables to a JSON string."""
+    """Serializes graph topology, metadata, causality, equations, and quantities to JSON."""
     data = {
         "name": bg.name,
         "components": [],
@@ -889,7 +899,7 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
         json.dump(data, f, indent=4)
 
 def importBG(json_file: str) -> BondGraph:
-    """Reconstructs a BondGraph object from a JSON file."""
+    """Reconstructs a complete bond graph, including ports, state, and connections."""
     with open(json_file, "r") as f:
         data = json.load(f)
     bg = BondGraph(name=data.get("name", "Imported_BG"))
