@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, exportBG,importBG
+from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, ConnectionType, exportBG,importBG
 from collections import deque
 class SystemType(Enum):
     """Classifies a graph's resulting ordinary or differential-algebraic system."""
@@ -180,7 +180,7 @@ class SCAPEngine:
         for comp in self.graph.components.values():
             if comp.type in (ComponentType.SE, ComponentType.MSE, ComponentType.SF, ComponentType.MSF):
                 for port in comp.ports.values():
-                    if port.bond: # active bond
+                    if port.bond and port.bond.type == ConnectionType.POWER_BOND: # active bond
                         is_effort_source = comp.type in (ComponentType.SE, ComponentType.MSE)
                         if is_effort_source:
                             target_causality = False # provides effort and receives flow
@@ -196,7 +196,7 @@ class SCAPEngine:
             # Targets explicit non-invertibles, signal blocks, or locked switches
             if getattr(comp, "non_invertible", False):
                 for port in comp.ports.values():
-                    if port.bond :
+                    if port.bond and port.bond.type == ConnectionType.POWER_BOND:
                         if port.fixed_causality is not None:
                             port.bond.assign_causality(port, port.fixed_causality)
                         else:
@@ -211,7 +211,7 @@ class SCAPEngine:
         for comp in self.graph.components.values():
             if comp.type in storage_types:
                 for port in comp.ports.values():
-                    if port.bond:
+                    if port.bond and port.bond.type == ConnectionType.POWER_BOND:
                         # Determine if this specific port acts as C or I
                         # For mixed IC/MIC, check port-level definitions; fallback to component level
                         pref_causality = None
@@ -240,7 +240,7 @@ class SCAPEngine:
         for comp in self.graph.components.values():
             if comp.type in (ComponentType.R, ComponentType.MR):
                 for port in comp.ports.values():
-                    if port.bond :
+                    if port.bond and port.bond.type == ConnectionType.POWER_BOND:
                         # Assign arbitrary effort out
                         if port.causality is None:
                             if other_port := port.bond.get_other_port(port):
@@ -258,7 +258,7 @@ class SCAPEngine:
                         neighbor = port.bond.get_other_component(comp)
                         self._propagate_worklist([neighbor])
 
-        unassigned = [b for b in self.graph.bonds if b.source.causality is None or b.target.causality is None]
+        unassigned = [b for b in self.graph.bonds if b.type == ConnectionType.POWER_BOND and (b.source.causality is None or b.target.causality is None)]
         if unassigned:
             print(f"Unassigned bonds: {[b.name for b in unassigned]}")
             raise RuntimeError(f"SCAP failed: {len(unassigned)} bond(s) remained unassigned. Check ill-posed structures or disconnected loops.")

@@ -235,7 +235,8 @@ class Bond:
     def validate_causality(self) -> bool:
         source = self.source.causality
         target = self.target.causality
-    
+        if self.type == ConnectionType.SIGNAL_BOND:
+            return True  # Signal bonds do not require causality validation
         if source is None and target is None:
             raise ValueError(
                 f"Bond '{self.name}' has unassigned causality for both endpoints."
@@ -783,6 +784,8 @@ class DomainRefiner:
         for domain, _ in refinement_map.values():
             domain_data = self.catalog.get(domain.name, {})
             for g_name, g_data in domain_data.get("physical_constants", {}).items():
+                if bg.physical_constants is None:
+                    bg.physical_constants = set()
                 if g_name not in bg.physical_constants:                    
                     g_pq = _pq_from_serializable(g_data)
                     if g_pq is not None:
@@ -1027,6 +1030,8 @@ if __name__ == "__main__":
     bg.add_bond(se, j1)
     bg.add_bond(j1, mass)
     bg.add_bond(j1, spring)
+    bg.add_bond(j1, damper)
+    bg.delete_bond(j1, damper)  # Example of deleting a bond
     bg.add_bond(j1, damper)
 
     # 1. Refine the graph with domain knowledge
