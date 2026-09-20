@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
-from utilities import infix_to_mathml
+from .utilities import infix_to_mathml
 from xml.dom import minidom
-from defineBG import BondGraph,PhysicalQuantity, importBG
+from .defineBG import BondGraph,PhysicalQuantity, importBG
 
 CellMLV1_namespaces = {
         'cellml': "http://www.cellml.org/cellml/1.1#",  # CellML namespace

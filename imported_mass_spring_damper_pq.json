@@ -1,0 +1,247 @@
+{
+    "name": "Mass_Spring_Damper",
+    "components": [
+        {
+            "name": "SE_Force",
+            "type": "SE",
+            "domain": "MECHANICAL_TRANSLATIONAL",
+            "non_invertible": false,
+            "num_power_ports": 1,
+            "num_signal_ports": 0,
+            "ports": [
+                {
+                    "label": "1",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "MECHANICAL_TRANSLATIONAL",
+                    "fixed_causality": null,
+                    "causality": null,
+                    "effort": {
+                        "description": "force",
+                        "symbol": "F_SE_Force",
+                        "units": "J_per_um",
+                        "value": null
+                    },
+                    "flow": {
+                        "description": "velocity",
+                        "symbol": "v_SE_Force",
+                        "units": "um_per_s",
+                        "value": null
+                    }
+                }
+            ],
+            "constitutive_equations": [
+                "e_0 - F_0"
+            ],
+            "parameters": {
+                "F_0": {
+                    "description": "fixed force",
+                    "symbol": "F_0_SE_Force",
+                    "units": "J_per_um",
+                    "value": 1
+                }
+            }
+        },
+        {
+            "name": "J1",
+            "type": "ONE",
+            "domain": "ABSTRACT",
+            "non_invertible": false,
+            "num_power_ports": 1,
+            "num_signal_ports": 0,
+            "ports": [
+                {
+                    "label": "1",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "ABSTRACT",
+                    "fixed_causality": null,
+                    "causality": null
+                },
+                {
+                    "label": "2",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "ABSTRACT",
+                    "fixed_causality": null,
+                    "causality": null
+                },
+                {
+                    "label": "3",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "ABSTRACT",
+                    "fixed_causality": null,
+                    "causality": null
+                },
+                {
+                    "label": "4",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "ABSTRACT",
+                    "fixed_causality": null,
+                    "causality": null
+                }
+            ]
+        },
+        {
+            "name": "I_Mass",
+            "type": "I",
+            "domain": "MECHANICAL_TRANSLATIONAL",
+            "non_invertible": false,
+            "num_power_ports": 1,
+            "num_signal_ports": 0,
+            "ports": [
+                {
+                    "label": "1",
+                    "type": "POWER_PORT",
+                    "storage": "I_TYPE",
+                    "domain": "MECHANICAL_TRANSLATIONAL",
+                    "fixed_causality": null,
+                    "causality": null,
+                    "effort": {
+                        "description": "force",
+                        "symbol": "F_I_Mass",
+                        "units": "J_per_um",
+                        "value": null
+                    },
+                    "flow": {
+                        "description": "velocity",
+                        "symbol": "v_I_Mass",
+                        "units": "um_per_s",
+                        "value": null
+                    },
+                    "momentum": {
+                        "description": "momentum",
+                        "symbol": "p_I_Mass",
+                        "units": "J_s_per_um",
+                        "value": 0
+                    }
+                }
+            ],
+            "constitutive_equations": [
+                "p_0 - m * f_0",
+                "ode(p_0,t) - e_0"
+            ],
+            "parameters": {
+                "m": {
+                    "description": "mass",
+                    "symbol": "m_I_Mass",
+                    "units": "J_s2_per_um2",
+                    "value": 1
+                }
+            }
+        },
+        {
+            "name": "C_Spring",
+            "type": "C",
+            "domain": "MECHANICAL_TRANSLATIONAL",
+            "non_invertible": false,
+            "num_power_ports": 1,
+            "num_signal_ports": 0,
+            "ports": [
+                {
+                    "label": "1",
+                    "type": "POWER_PORT",
+                    "storage": "C_TYPE",
+                    "domain": "MECHANICAL_TRANSLATIONAL",
+                    "fixed_causality": null,
+                    "causality": null,
+                    "effort": {
+                        "description": "force",
+                        "symbol": "F_C_Spring",
+                        "units": "J_per_um",
+                        "value": null
+                    },
+                    "flow": {
+                        "description": "velocity",
+                        "symbol": "v_C_Spring",
+                        "units": "um_per_s",
+                        "value": null
+                    },
+                    "quantity": {
+                        "description": "displacement",
+                        "symbol": "x_C_Spring",
+                        "units": "um",
+                        "value": 0
+                    }
+                }
+            ],
+            "constitutive_equations": [
+                "q_0 - C * e_0",
+                "ode(q_0,t) - f_0"
+            ],
+            "parameters": {
+                "C": {
+                    "description": "capacitance",
+                    "symbol": "C_C_Spring",
+                    "units": "um2_per_J",
+                    "value": 1
+                }
+            }
+        },
+        {
+            "name": "R_Damper",
+            "type": "R",
+            "domain": "MECHANICAL_TRANSLATIONAL",
+            "non_invertible": false,
+            "num_power_ports": 1,
+            "num_signal_ports": 0,
+            "ports": [
+                {
+                    "label": "1",
+                    "type": "POWER_PORT",
+                    "storage": null,
+                    "domain": "MECHANICAL_TRANSLATIONAL",
+                    "fixed_causality": null,
+                    "causality": null,
+                    "effort": {
+                        "description": "force",
+                        "symbol": "F_R_Damper",
+                        "units": "J_per_um",
+                        "value": null
+                    },
+                    "flow": {
+                        "description": "velocity",
+                        "symbol": "v_R_Damper",
+                        "units": "um_per_s",
+                        "value": null
+                    }
+                }
+            ],
+            "constitutive_equations": [
+                "e_0 - eta*f_0"
+            ],
+            "parameters": {
+                "eta": {
+                    "description": "viscosity",
+                    "symbol": "eta_R_Damper",
+                    "units": "J_s_per_um2",
+                    "value": 1
+                }
+            }
+        }
+    ],
+    "bonds": [
+        {
+            "source": "SE_Force.1",
+            "target": "J1.1",
+            "type": "POWER_BOND"
+        },
+        {
+            "source": "J1.2",
+            "target": "I_Mass.1",
+            "type": "POWER_BOND"
+        },
+        {
+            "source": "J1.3",
+            "target": "C_Spring.1",
+            "type": "POWER_BOND"
+        },
+        {
+            "source": "J1.4",
+            "target": "R_Damper.1",
+            "type": "POWER_BOND"
+        }
+    ]
+}

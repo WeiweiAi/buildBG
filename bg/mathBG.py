@@ -1,4 +1,4 @@
-from defineBG import JUNCTIONS, Component, Port, Bond, ComponentType, ConnectionType, BondGraph, Equation, importBG,exportBG
+from .defineBG import JUNCTIONS, Component, Port, Bond, ComponentType, ConnectionType, BondGraph, Equation, importBG,exportBG
 import sympy as sp
 
 # SymPy is used for symbolic elimination while Equation remains the public model type.

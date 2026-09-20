@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, ConnectionType, exportBG,importBG
+from .defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, ConnectionType, exportBG,importBG
 from collections import deque
 
 # System classifications returned after causality assignment completes.

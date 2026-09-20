@@ -1,5 +1,5 @@
 import graphviz
-from defineBG import BondGraph, ComponentType, JUNCTIONS, ConnectionType
+from .defineBG import BondGraph, ComponentType, JUNCTIONS, ConnectionType
 
 # Console and Graphviz renderers for inspecting a bond graph after construction.
 def print_bond_table(bg: BondGraph) -> None:
