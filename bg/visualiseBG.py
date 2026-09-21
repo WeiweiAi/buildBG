@@ -21,7 +21,7 @@ def print_bond_table(bg: BondGraph) -> None:
 
         print(f"Bond {i:<3} | {src:<12} | {tgt:<15} | {direction}")
 
-def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", view: bool = True) -> graphviz.Digraph:
+def drawBG(bg: BondGraph, filename: str = "bond_graph",file_path: str = ".././examples", format: str = "png", view: bool = True) -> graphviz.Digraph:
         """
     Renders the bond graph from source to target with formal causal strokes.
         - Power flow arrow points from source to target.
@@ -99,6 +99,5 @@ def drawBG(bg: BondGraph, filename: str = "bond_graph", format: str = "png", vie
                 arrowsize="1.0",
                 penwidth="1.5"
             )
-
-        dot.render(filename=filename, format=format, cleanup=True, view=view)
+        dot.render(filename=filename, directory=file_path, format=format, cleanup=True, view=view)
         return dot

@@ -1,6 +1,6 @@
 from enum import Enum, auto
-from .defineBG import  ComponentType,  Component, Bond, BondGraph, StorageType, ConnectionType, exportBG,importBG
 from collections import deque
+from .defineBG import ComponentType, Component, Bond, BondGraph, StorageType, ConnectionType, exportBG, importBG
 
 # System classifications returned after causality assignment completes.
 class SystemType(Enum):
@@ -273,8 +273,8 @@ class SCAPEngine:
 if __name__ == "__main__":
     bg = importBG('mass_spring_damper.json')  # Load a BondGraph from a JSON file
     # Add components and bonds to the bond graph as needed
-    scap_engine = SCAPEngine(bg)
-    system_type = scap_engine.run()
-    exportBG(bg, 'mass_spring_damper_causality.json')  # Export the BondGraph to a JSON file
-    print(f"System type: {system_type.name}")  
-    
+    if bg is not None:
+        scap_engine = SCAPEngine(bg)
+        system_type = scap_engine.run()
+        exportBG(bg, 'mass_spring_damper_causality.json')  # Export the BondGraph to a JSON file
+        print(f"System type: {system_type.name}")  

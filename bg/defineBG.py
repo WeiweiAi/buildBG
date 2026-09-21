@@ -3,7 +3,7 @@ from enum import Enum, auto
 from dataclasses import asdict, dataclass, field, is_dataclass
 from collections import deque
 import warnings
-import json
+from .utilities import load_json, save_json
 
 # Define basic data structures for bond graph modeling, including components, ports, bonds, and the overall bond graph.
 class ComponentType(Enum):
@@ -718,10 +718,13 @@ class BondGraph:
 class DomainRefiner:
     """Decorates abstract Bond Graph components with physical domain knowledge."""
     
-    def __init__(self, catalog_path: str) -> None:
+    def __init__(self, catalog_path: str, folder_path: str = './') -> None:
         """Loads the JSON catalog used to decorate abstract graph elements."""
-        with open(catalog_path, 'r') as f:
-            self.catalog = json.load(f)
+        try:
+            loaded_catalog = load_json(catalog_path, folder_path)
+            self.catalog = loaded_catalog
+        except Exception as e:
+            raise ValueError(f"Failed to load catalog from '{catalog_path}': {e}")
 
     def refine_component(self, component: Component, domain: Domain, template_id: str | None = None) -> None:
         """Applies domain variables, parameters, and equations to an existing component."""
@@ -831,7 +834,7 @@ def _eq_from_serializable(data: dict) -> Equation | None:
         return Equation(**data)
     return None
 
-def exportBG(bg: BondGraph,json_file: str) -> None:
+def exportBG(bg: BondGraph,json_file: str, folder_path: str = '.././examples') -> None:
     """Serializes graph topology, metadata, causality, equations, and quantities to JSON."""
     data = {
         "name": bg.name,
@@ -895,13 +898,18 @@ def exportBG(bg: BondGraph,json_file: str) -> None:
             "type": bond.type.name
         })
 
-    with open(json_file, "w") as f:
-        json.dump(data, f, indent=4)
+    # Write to JSON file
+    save_json(data, json_file, folder_path)
 
-def importBG(json_file: str) -> BondGraph:
+def importBG(json_file: str, folder_path: str = '.././examples') -> BondGraph|None:
     """Reconstructs a complete bond graph, including ports, state, and connections."""
-    with open(json_file, "r") as f:
-        data = json.load(f)
+    try:
+        loaded_data = load_json(json_file, folder_path)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return None
+
+    data = loaded_data
     bg = BondGraph(name=data.get("name", "Imported_BG"))
     if "equations" in data:
         bg.equations = []
@@ -988,11 +996,14 @@ def importBG(json_file: str) -> BondGraph:
 
     return bg
 
-def importBG_pq(bg: BondGraph, json_file: str) -> BondGraph:
+def importBG_pq(bg: BondGraph, json_file: str, folder_path: str = '.././examples') -> BondGraph:
     """Imports only the physical quantities of a BondGraph from a JSON file, including constants,
     component parameters, and port variables."""
-    with open(json_file, "r") as f:
-        data = json.load(f)
+    try:
+        data = load_json(json_file, folder_path)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return bg  # Return the original graph unchanged if the file is not found
 
     if "physical_constants" in data:
         bg.physical_constants = set()
@@ -1056,6 +1067,8 @@ if __name__ == "__main__":
     # 1. Export unassigned or partially assigned graph
     exportBG(bg, "mass_spring_damper.json")
     restored_bg = importBG("mass_spring_damper.json")
-    exportBG(restored_bg, "restored_mass_spring_damper.json")
-    imported_bg = importBG_pq(restored_bg, "mass_spring_damper.json")
-    exportBG(imported_bg, "imported_mass_spring_damper_pq.json")
+    if restored_bg is not None:
+        exportBG(restored_bg, "restored_mass_spring_damper.json")
+        imported_bg = importBG_pq(restored_bg, "mass_spring_damper.json")
+        if imported_bg is not None:
+            exportBG(imported_bg, "imported_mass_spring_damper_pq.json")

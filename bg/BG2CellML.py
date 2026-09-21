@@ -287,5 +287,6 @@ def BG2CellMLV1(bg: BondGraph):
 if __name__ == "__main__": 
     
    bg = importBG("mass_spring_damper_equations.json")
-   model_ET=BG2CellMLV1(bg)
-   write_cellmlV1(model_ET, "mass_spring_damper.cellml")
+   if bg is not None:
+       model_ET=BG2CellMLV1(bg)
+       write_cellmlV1(model_ET, "mass_spring_damper.cellml")

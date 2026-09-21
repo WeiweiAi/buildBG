@@ -50,7 +50,7 @@ def _connection_type(value: str) -> ConnectionType:
         ) from error
 
 
-def _load_graph(path: Path) -> BondGraph:
+def _load_graph(path: Path) -> BondGraph| None:
     """Load a JSON bond graph and provide a consistent command error."""
     try:
         return importBG(str(path))
@@ -85,6 +85,8 @@ def _parse_refinement(value: str) -> tuple[str, Domain, str]:
 def command_edit(args: argparse.Namespace) -> None:
     """Apply component and bond edits to a graph, then serialize the result."""
     graph = _load_graph(args.input) if args.input else BondGraph(args.name)
+    if graph is None:
+        raise RuntimeError(f"Failed to create or load graph '{args.input}'.")
 
     for component_name in args.add_component:
         name, type_name = component_name.split("=", 1)
@@ -102,6 +104,8 @@ def command_edit(args: argparse.Namespace) -> None:
 def command_serialize(args: argparse.Namespace) -> None:
     """Re-serialize a graph or convert it to a CellML V1 model."""
     graph = _load_graph(args.input)
+    if graph is None:
+        raise RuntimeError(f"Failed to load graph '{args.input}'.")
     if args.cellml:
         args.cellml.parent.mkdir(parents=True, exist_ok=True)
         write_cellmlV1(BG2CellMLV1(graph), str(args.cellml))
@@ -111,9 +115,13 @@ def command_serialize(args: argparse.Namespace) -> None:
 
 def command_refine(args: argparse.Namespace) -> None:
     """Apply catalog-backed domain metadata to selected graph components."""
+    if args.input is None:
+        raise RuntimeError("Input graph is required for refinement.")
     graph = _load_graph(args.input)
-    refinement_map = {
-        name: (domain, template or None)
+    if graph is None:
+        raise RuntimeError(f"Failed to load graph '{args.input}'.")
+    refinement_map: dict[str, tuple[Domain, str]] = {
+        name: (domain, template or "")
         for name, domain, template in args.component
     }
     DomainRefiner(str(args.catalog)).refine_graph(graph, refinement_map)
@@ -122,7 +130,11 @@ def command_refine(args: argparse.Namespace) -> None:
 
 def command_scap(args: argparse.Namespace) -> None:
     """Run sequential causality assignment and serialize the classified graph."""
+    if args.input is None:
+        raise RuntimeError("Input graph is required for SCAP.")
     graph = _load_graph(args.input)
+    if graph is None:
+        raise RuntimeError(f"Failed to load graph '{args.input}'.")
     system_type = SCAPEngine(graph).run()
     _write_graph(graph, args.output)
     print(f"System type: {system_type.name}")
@@ -131,6 +143,8 @@ def command_scap(args: argparse.Namespace) -> None:
 def command_math(args: argparse.Namespace) -> None:
     """Generate, translate, and serialize network or constitutive equations."""
     graph = _load_graph(args.input)
+    if graph is None:
+        raise RuntimeError(f"Failed to load graph '{args.input}'.")
     builder = EquationBuilder(graph)
     equations = []
     if args.kind in ("network", "all"):
@@ -144,7 +158,11 @@ def command_math(args: argparse.Namespace) -> None:
 
 def command_visualize(args: argparse.Namespace) -> None:
     """Print a bond table and/or render the graph through Graphviz."""
+    if args.input is None:
+        raise RuntimeError("Input graph is required for visualization.")
     graph = _load_graph(args.input)
+    if graph is None:
+        raise RuntimeError(f"Failed to load graph '{args.input}'.")
     if args.table:
         print_bond_table(graph)
     if args.render:

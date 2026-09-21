@@ -336,21 +336,21 @@ class EquationBuilder:
 if __name__ == "__main__":
     # Example usage
     bg = importBG("mass_spring_damper_causality.json")
-    builder = EquationBuilder(bg)
-    
-    equations = builder.generate_network_equations()
-    print("Network Equations:")
-    for eq in equations:
-        print("expression:", eq.expression, "\n","description:", eq.description)
+    if bg is not None:
+        builder = EquationBuilder(bg)    
+        equations = builder.generate_network_equations()
+        print("Network Equations:")
+        for eq in equations:
+            print("expression:", eq.expression, "\n","description:", eq.description)
 
-    constitutive_eqs = builder._generate_constitutive_equations()
-    print("\nConstitutive Equations:")
-    for eq in constitutive_eqs:
-        print("expression:", eq.expression, "\n","description:", eq.description)
+        constitutive_eqs = builder._generate_constitutive_equations()
+        print("\nConstitutive Equations:")
+        for eq in constitutive_eqs:
+            print("expression:", eq.expression, "\n","description:", eq.description)
 
-    equations_with_symbols = builder.translate_to_symbols(equations + constitutive_eqs)
-    print("\nEquations with Physical Symbols:")
-    for eq in equations_with_symbols:
-        print("dependent_symbol:", eq.dependent_symbol, "expression:", eq.expression, "\n","description:", eq.description)    
+        equations_with_symbols = builder.translate_to_symbols(equations + constitutive_eqs)
+        print("\nEquations with Physical Symbols:")
+        for eq in equations_with_symbols:
+            print("dependent_symbol:", eq.dependent_symbol, "expression:", eq.expression, "\n","description:", eq.description)    
 
-    exportBG(bg, "mass_spring_damper_equations.json")      
+        exportBG(bg, "mass_spring_damper_equations.json")      

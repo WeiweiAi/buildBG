@@ -2,11 +2,14 @@ import json
 import numpy as np
 import csv
 import libsbml
-from networkx.readwrite import json_graph
-import webbrowser
-import os
+from pathlib import Path
+import warnings
+#Get the directory where THIS script file lives
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-def load_json(json_file):
+
+
+def load_json(json_file: str, folder_path: str = '.././examples') -> dict:
     """
     Load the json file to a dictionary
 
@@ -14,27 +17,43 @@ def load_json(json_file):
     ----------
     json_file : str
         The file path of the json file
+    folder_path : str
+        The relative path of the folder where the json file is located
+        By default, the json file will be loaded from the examples folder
 
     Returns
     -------
     comp_dict : dict
-        The dictionary of the json file
+        The dictionary of the json file  
 
     """
-    with open(json_file) as f:
+    # check if the folder exists, if not, raise an error
+    target_folder = Path(SCRIPT_DIR / folder_path).resolve()
+    if not target_folder.exists():
+        raise FileNotFoundError(f"The folder '{target_folder}' does not exist.")
+
+    full_path = Path(target_folder / json_file)
+    if not full_path.exists():
+        raise FileNotFoundError(f"The file '{full_path}' does not exist.")
+
+    with open(full_path, 'r') as f:
         comp_dict = json.load(f)
+
     return comp_dict
 
-def save_json(comp_dict, json_file):
+def save_json(data: dict, json_file: str, folder_path: str = '.././examples'):
     """
     Save the dictionary to a json file
 
     Parameters
     ----------
-    comp_dict : dict
+    data : dict
         The dictionary of the bond graph model
     json_file : str
-        The file path of the json file
+        The name of the json file
+    folder_path : str
+        The relative path of the folder where the json file will be saved
+        By default, the json file will be saved in the examples folder
 
     Returns
     -------
@@ -45,8 +64,21 @@ def save_json(comp_dict, json_file):
     Save the dictionary to a json file
 
     """
-    with open(json_file, 'w') as f:
-        json.dump(comp_dict, f,indent=4)
+    # create the folder if it does not exist
+    target_folder = Path(SCRIPT_DIR / folder_path).resolve()
+    if not target_folder.exists():
+        target_folder.mkdir(parents=True, exist_ok=True)
+
+    # check if the json file already exists, if yes, raise a warning
+    full_path = Path(target_folder/ json_file)
+    if full_path.exists():
+        # Take user input to decide whether to overwrite the file or not
+        user_input = input(f"The file '{full_path}' already exists. Do you want to overwrite it? (y/n): ")
+        if user_input.lower() != 'y':
+            print("Operation cancelled.")
+            return
+    with open(full_path, 'w') as f:
+        json.dump(data, f,indent=4)
 
 def load_matrix(matrix):
     """
@@ -234,186 +266,7 @@ def infix_to_mathml(ode_var,infix, voi='',version='1.1'):
         mathstr = '<apply>' + mathstr + ' </apply>'
     return mathstr
 
-def save_nxBG_json(G, filename='nx_BG.json'):
-    """
-    Save the bond graph in json format using networkx and json_graph
-    Parameters
-    ----------
-    G : nx.DiGraph
-        The bond graph built using networkx
-    filename : str, optional
-        The name of the file to save the bond graph. The default is 'nx_BG.json'.
-    """
-    with open(filename, 'w') as f:
-        json.dump(json_graph.node_link_data(G,edges="edges"), f, indent=4)
 
-def load_nxBG_json(filename):
-    """
-    Load the bond graph in json format using networkx and json_graph
-    Parameters
-    ----------
-    filename : str
-        The name of the file to load the bond graph.
-    Returns
-    -------
-    G : nx.DiGraph
-        The bond graph built using networkx
-    """
-
-    with open(filename, 'r') as f:
-        data = json.load(f)
-    G = json_graph.node_link_graph(data, edges="edges", directed=True)
-    return G
-
-def _pyvis_BG(G):
-    """
-    Convert the bond graph to pyvis network for visualization
-
-    Parameters
-    ----------
-    G : nx.DiGraph
-        The bond graph built using networkx
-
-    Returns
-    -------
-    pyvis_net : pyvis.network.Network
-        The bond graph in pyvis network format
-    """
-    pyvis_net = Network(cdn_resources='in_line', directed=True)
-    pyvis_net.from_nx(G)
-    return pyvis_net
-
-def _pyvis_net_fomat(pyvis_net):
-    """
-    Format the bond graph (pyvis_net) for visualization
-        
-    """ 
-    for node in pyvis_net.nodes:
-        if 'a' in node.keys():
-            if node['a']=='BondElement':
-                node['shape']='box'
-                node['size']=20
-                node['color']={'background':'cyan'}
-                node['group']='BondElement'
-            elif node['a']=='JunctionStructure':
-                node['size']=5
-                if node['subClass']=='ZeroJunctionStructure':
-                    node['shape']='dot'
-                    node['color']={'background':'blue'}
-                elif node['subClass']=='OneJunctionStructure':
-                    node['shape']='dot'
-                    node['color']={'background':'black'}
-                elif node['subClass']=='TF' or node['subClass']=='MTF':
-                    node['shape']='square'
-                    node['color']={'background':'yellow'}
-                elif node['subClass']=='GY' or node['subClass']=='MGY':
-                    node['shape']='square'
-                    node['color']={'background':'blue'}
-            elif node['a']=='PowerPort':
-                node['shape']='diamond'
-                node['size']=5
-                node['color']={'background':'white'}
-                node['group']='PowerPort'
-            elif node['a']=='SignalPort':
-                node['shape']='hexagon'
-                node['size']=5
-                node['color']={'background':'black'}
-            node['label']=node['id']
-            node['font']={'size':10} 
-    for edge in pyvis_net.edges:
-        if 'a' in edge.keys():
-            if edge['a']=='PowerBond':
-                edge['color']={'color':'blue'}
-                edge['length']=100
-                edge['width']=2
-            elif edge['a']=='SignalBond':
-                edge['color']={'color':'black'}
-        else:
-            edge['dashes']='true'
-            edge['color']={'color':'gray'}
-            edge['length']=10
-            edge['width']=1
-
-def _nxBG_pyvis_net(pyvis_net, filename='nx_BG.html'):
-    """
-    Save the bond graph in pyvis network format to html for visualization
-
-    Parameters
-    ----------
-    pyvis_net : pyvis.network.Network
-        The bond graph in pyvis network format
-    filename : str, optional
-        The name of the file to save the bond graph. The default is 'nx_BG.html'.
-
-    Returns
-    -------
-    None
-        
-    """
-    pyvis_net.set_options("""
-        var options = {
-            "edges": {
-                "smooth": true,
-                "width": 2
-            },
-            "physics": {
-                "enabled": true,
-                "barnesHut": {
-                  "gravitationalConstant": -20000,
-                  "centralGravity": 0.8,
-                  "springLength": 100,  
-                  "springConstant": 0.8
-                },
-                "repulsion": {
-                  "nodeDistance": 20, 
-                  "springLength": 20    
-                },
-                "hierarchicalRepulsion": {
-                  "nodeDistance": 10,
-                  "springLength": 5 
-                },
-                "minVelocity": 0.75
-            }
-        }
-    """)
-   # Generate the HTML content
-    html_content = pyvis_net.generate_html()
-
-    # Remove the div with class "card"
-    html_content = html_content.replace('<div class="card" style="width: 100%">', '').replace('<div id="mynetwork" class="card-body">', '<div id="mynetwork">').replace('</div>', '', 1)
-
-    # Ensure the graph takes the whole page
-    html_content = html_content.replace('<div id="mynetwork">', '<div id="mynetwork" style="width: 100%; height: 100vh;">')
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-def save_nxBG_html(G, filename='nx_BG.html'):
-    """
-    Save the bond graph in pyvis network format to html for visualization
-
-    Parameters
-    ----------
-    G : nx.Graph
-        The bond graph in networkx format
-    filename : str, optional
-        The name of the file to save the bond graph. The default is 'nx_BG.html'.
-
-    Returns
-    -------
-    None
-
-    side effect
-    ------------
-    Save the bond graph in pyvis network format to html for visualization
-    Use the default web browser to open the html file
-        
-    """
-
-    pyvis_net = _pyvis_BG(G)
-    _pyvis_net_fomat(pyvis_net)
-    _nxBG_pyvis_net(pyvis_net, filename)
-    browser = webbrowser.get()
-    browser.open(os.path.abspath(filename))
 
 
 def read_ParamCellML(sbml_file):
